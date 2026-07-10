@@ -62,6 +62,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   const canvasRef = React.useRef(null);
 
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [reniecLoading, setReniecLoading] = useState(false);
   const [initialDni, setInitialDni] = useState('');
@@ -193,6 +194,28 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     montoTotalCalculado = `S/. ${(montoFloat * cuotasInt).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
+  async function compressImage(file, maxWidth = 1920, quality = 0.7) {
+    if (!file.type.startsWith('image/')) return file;
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -203,6 +226,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     }
 
     setLoading(true);
+    setSubmitting(true);
 
     const formData = new FormData();
     formData.append('dni', dni);
@@ -259,6 +283,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
       setError(err.message);
     } finally {
       setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -369,16 +394,17 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     e.preventDefault();
   };
 
-  const handleDropFile = (e, docType) => {
+  const handleDropFile = async (e, docType) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) {
-      if (docType === 'principal') { setFilePrincipal(file); setDelPrincipal(false); }
-      if (docType === 'duplicado') { setFileDuplicado(file); setDelDuplicado(false); }
-      if (docType === 'respaldo') { setFileRespaldo(file); setDelRespaldo(false); }
-      if (docType === 'declaracion') { setFileDeclaracion(file); setDelDeclaracion(false); }
-      if (docType === 'dni') { setFileDni(file); setDelDni(false); }
-      if (docType === 'evidencias') { setFileEvidencias(file); setDelEvidencias(false); }
+      const compressed = await compressImage(file);
+      if (docType === 'principal') { setFilePrincipal(compressed); setDelPrincipal(false); }
+      if (docType === 'duplicado') { setFileDuplicado(compressed); setDelDuplicado(false); }
+      if (docType === 'respaldo') { setFileRespaldo(compressed); setDelRespaldo(false); }
+      if (docType === 'declaracion') { setFileDeclaracion(compressed); setDelDeclaracion(false); }
+      if (docType === 'dni') { setFileDni(compressed); setDelDni(false); }
+      if (docType === 'evidencias') { setFileEvidencias(compressed); setDelEvidencias(false); }
     }
   };
 
@@ -413,19 +439,58 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
 
         {hasExistingFile && !delState ? (
           <div className="existing-file-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
-            <span className="existing-file-name" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }} title={getFileName(authorization[docKey === 'principal' ? 'autorizacion_principal' : docKey === 'duplicado' ? 'autorizacion_duplicado' : docKey === 'respaldo' ? 'autorizacion_respaldo' : docKey === 'declaracion' ? 'declaracion_jurada' : docKey === 'dni' ? 'copia_dni' : 'evidencias'])}>
+            <span className="existing-file-name" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }} title={getFileName(authorization[docKey === 'principal' ? 'autorizacion_principal' : docKey === 'duplicado' ? 'autorizacion_duplicado' : docKey === 'respaldo' ? 'autorizacion_respaldo' : docKey === 'declaracion' ? 'declaracion_jurada' : docKey === 'dni' ? 'copia_dni' : 'evidencias'])}>
               <FileText size={14} style={{ color: 'var(--accent-primary)' }} /> 
-              {docKey === 'declaracion' ? 'Declaracion' : docKey === 'copia_dni' ? 'Copia_DNI' : docKey.charAt(0).toUpperCase() + docKey.slice(1)}.pdf
+              {docKey === 'declaracion' ? 'Declaracion' : docKey === 'dni' ? 'Copia_DNI' : docKey.charAt(0).toUpperCase() + docKey.slice(1)}.pdf
             </span>
-            <label className="delete-file-checkbox" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#f87171', margin: 0 }}>
-              <input
-                type="checkbox"
-                checked={delState}
-                onChange={(e) => setDelState(e.target.checked)}
-                style={{ cursor: 'pointer', margin: 0 }}
-              />
-              Eliminar
-            </label>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDelState(true);
+                  setFileState(null);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  color: '#fca5a5',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Eliminar archivo"
+              >
+                Eliminar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const input = document.getElementById(`file-input-${docKey}`);
+                  if (input) input.click();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  color: '#a5b4fc',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Reemplazar archivo"
+              >
+                Reemplazar
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
@@ -454,9 +519,10 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
                 type="file"
                 style={{ display: 'none' }}
                 accept=".pdf,.png,.jpg,.jpeg"
-                onChange={(e) => {
+                onChange={async (e) => {
                   if (e.target.files[0]) {
-                    setFileState(e.target.files[0]);
+                    const compressed = await compressImage(e.target.files[0]);
+                    setFileState(compressed);
                     setDelState(false);
                   }
                 }}
@@ -709,9 +775,14 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={loading}
+              disabled={loading || submitting}
             >
-              {loading ? (
+              {submitting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Subiendo archivos...</span>
+                </>
+              ) : loading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
                   <span>Guardando...</span>

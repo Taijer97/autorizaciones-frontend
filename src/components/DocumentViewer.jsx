@@ -136,7 +136,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
   // Print selected file
   const handlePrint = () => {
     if (!selectedFile) return;
-    const fileUrl = `/${selectedFile}`;
+    const fileUrl = `/${selectedFile}?t=${Date.now()}`;
     const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
     
     if (isPdf) {
@@ -464,7 +464,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                       <span>Imprimir</span>
                     </button>
                     <a 
-                      href={`/${selectedFile}`}
+                      href={`/${selectedFile}?t=${Date.now()}`}
                       target="_blank"
                       rel="noreferrer"
                       className="btn btn-secondary"
@@ -480,7 +480,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                 <div ref={containerRef} className="viewer-preview-body" style={{ overflow: 'auto', display: 'block', padding: '16px' }}>
                   {isPdfFile(selectedFile) ? (
                     <iframe 
-                      src={`/${selectedFile}`} 
+                      src={`/${selectedFile}?t=${Date.now()}`} 
                       className="preview-iframe"
                       title={selectedTitle}
                     />
@@ -494,7 +494,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                       boxSizing: 'border-box'
                     }}>
                       <img 
-                        src={`/${selectedFile}`} 
+                        src={`/${selectedFile}?t=${Date.now()}`} 
                         className="preview-image"
                         alt={selectedTitle}
                         style={{ 
