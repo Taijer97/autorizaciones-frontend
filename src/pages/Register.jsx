@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { UserPlus, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
+import { UserPlus, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import './Login.css';
 
 const Register = () => {
@@ -12,6 +12,7 @@ const Register = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -177,16 +178,38 @@ const Register = () => {
 
           <div className="form-group">
             <label className="form-label" htmlFor="pin">PIN de Acceso (6 dígitos)</label>
-            <input
-              type="password"
-              id="pin"
-              className="form-input"
-              placeholder="••••••"
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              disabled={loading || success}
-              maxLength={6}
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                type={showPin ? 'text' : 'password'}
+                id="pin"
+                className="form-input"
+                placeholder="••••••"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                disabled={loading || success}
+                maxLength={6}
+                style={{ paddingRight: '40px', width: '100%' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '4px'
+                }}
+              >
+                {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button type="submit" className="btn btn-primary" style={{ marginTop: '15px' }} disabled={loading || success}>

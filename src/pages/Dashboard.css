@@ -150,6 +150,58 @@
   font-weight: 500;
 }
 
+/* Compact Stats Grid */
+.stats-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid-compact {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-grid-compact {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat-card-mini {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.stat-icon-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-value-mini {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat-label-mini {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 /* Filters & Search Row */
 .filters-panel {
   padding: 20px;
@@ -326,29 +378,77 @@
 @media (max-width: 580px) {
   .dashboard-header {
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
-    padding: 14px 20px;
+    padding: 10px 14px;
     text-align: center;
   }
   
+  .header-logo {
+    gap: 8px;
+  }
+
+  .header-logo img {
+    max-height: 32px !important;
+  }
+
+  .logo-text {
+    font-size: 1rem !important;
+  }
+
   .header-user-actions {
     width: 100%;
     justify-content: center;
-    gap: 12px;
+    gap: 8px;
   }
   
   .user-profile-badge {
-    padding: 4px 10px;
+    padding: 4px 8px;
+    gap: 6px;
   }
   
   .profile-name {
-    display: none; /* Hide name on small screens, keep avatar */
+    display: none;
+  }
+
+  .dashboard-main {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .stats-grid-compact {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card-mini {
+    padding: 8px 6px;
+    gap: 4px;
+  }
+
+  .stat-icon-mini {
+    width: 26px;
+    height: 26px;
+  }
+
+  .stat-icon-mini svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .stat-value-mini {
+    font-size: 1rem;
+  }
+
+  .stat-label-mini {
+    font-size: 0.6rem;
   }
 
   .filters-panel {
+    padding: 12px;
     flex-direction: column;
     align-items: stretch !important;
+    gap: 10px;
   }
 
   .search-input-wrapper {
@@ -358,12 +458,111 @@
 
   .filter-select {
     width: 100%;
+    min-width: unset;
   }
 
   .table-header-row {
     flex-direction: column;
     align-items: stretch !important;
-    gap: 15px;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .table-title {
+    font-size: 0.95rem;
+  }
+
+  /* Table horizontal scroll with compact cells */
+  .custom-table {
+    font-size: 0.78rem;
+  }
+
+  .custom-table th {
+    padding: 10px 10px;
+    font-size: 0.65rem;
+  }
+
+  .custom-table td {
+    padding: 10px 10px;
+  }
+
+  .file-dots-group {
+    gap: 4px;
+  }
+
+  .file-dot-item {
+    width: 7px;
+    height: 7px;
+  }
+
+  .actions-cell {
+    gap: 4px;
+  }
+
+  .actions-cell .btn-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .no-data-card {
+    padding: 30px 16px;
+  }
+
+  /* Pagination mobile */
+  .pagination-controls {
+    flex-direction: column;
+    align-items: center !important;
+    gap: 10px !important;
+    padding-top: 12px !important;
+    margin-top: 10px !important;
+  }
+
+  /* Admin tabs compact */
+  .admin-tabs {
+    gap: 0 !important;
+  }
+
+  .tab-btn {
+    padding: 4px 8px !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* Toast mobile */
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: 100%;
+  }
+
+  .toast {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .toast-title {
+    font-size: 0.85rem;
+  }
+
+  .toast-message {
+    font-size: 0.75rem;
+  }
+}
+
+/* Tablet tweaks */
+@media (max-width: 768px) and (min-width: 581px) {
+  .dashboard-main {
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .custom-table {
+    font-size: 0.82rem;
+  }
+
+  .custom-table th,
+  .custom-table td {
+    padding: 12px 14px;
   }
 }
 

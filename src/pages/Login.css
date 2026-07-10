@@ -115,3 +115,41 @@
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .login-container {
+    padding: 12px;
+  }
+
+  .login-card {
+    padding: 24px 18px;
+    max-width: 100%;
+  }
+
+  .login-header {
+    margin-bottom: 20px;
+  }
+
+  .login-header img {
+    max-height: 56px !important;
+  }
+
+  .login-title {
+    font-size: 1.3rem !important;
+  }
+
+  .login-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .sphere-1 {
+    width: 200px;
+    height: 200px;
+  }
+
+  .sphere-2 {
+    width: 250px;
+    height: 250px;
+  }
+}

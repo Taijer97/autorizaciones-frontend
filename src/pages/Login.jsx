@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { FileLock2, AlertCircle, Loader2 } from 'lucide-react';
+import { FileLock2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import './Login.css';
 
 const Login = () => {
@@ -9,6 +9,7 @@ const Login = () => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   
   const { user, login } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -103,15 +104,37 @@ const Login = () => {
 
           <div className="form-group">
             <label className="form-label" htmlFor="pin">PIN de Acceso</label>
-            <input
-              type="password"
-              id="pin"
-              className="form-input"
-              placeholder="••••••"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              disabled={loading}
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                type={showPin ? 'text' : 'password'}
+                id="pin"
+                className="form-input"
+                placeholder="••••••"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                disabled={loading}
+                style={{ paddingRight: '40px', width: '100%' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '4px'
+                }}
+              >
+                {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button type="submit" className="btn btn-primary" style={{ marginTop: '10px' }} disabled={loading}>
@@ -130,9 +153,6 @@ const Login = () => {
           <p>
             ¿No tiene una cuenta? <Link to="/register" style={{ color: 'var(--accent-primary)', fontWeight: 'bold', textDecoration: 'none' }}>Regístrese aquí</Link>
           </p>
-          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)', margin: '15px 0' }} />
-          <p>Credenciales por defecto:</p>
-          <p style={{ marginTop: '4px' }}>Admin: <b>00000000 / admin123</b> • User: <b>11111111 / user123</b></p>
         </div>
       </div>
       

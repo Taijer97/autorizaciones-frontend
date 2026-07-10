@@ -223,3 +223,91 @@
   border-top: 1px solid var(--border-color);
   padding-top: 20px;
 }
+
+/* Mobile responsiveness for modals and forms */
+@media (max-width: 580px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    max-width: 100%;
+    max-height: 95vh;
+    padding: 16px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: modalSlideUp 0.3s ease-out forwards;
+  }
+
+  @keyframes modalSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .modal-header {
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+  }
+
+  .form-grid {
+    gap: 10px;
+  }
+
+  .form-group {
+    margin-bottom: 12px;
+    gap: 4px;
+  }
+
+  .form-label {
+    font-size: 0.75rem;
+  }
+
+  .form-input {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .calculated-field-card {
+    padding: 8px 12px;
+  }
+
+  .calculated-value {
+    font-size: 1rem;
+  }
+
+  .files-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .file-upload-card {
+    padding: 10px;
+  }
+
+  .file-status-label {
+    max-width: 140px;
+    font-size: 0.72rem;
+  }
+
+  .form-actions {
+    margin-top: 16px;
+    padding-top: 12px;
+    gap: 8px;
+  }
+
+  .form-actions .btn {
+    flex: 1;
+    padding: 10px;
+    font-size: 0.85rem;
+  }
+}

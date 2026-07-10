@@ -62,6 +62,9 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
       } else if (authorization.copia_dni) {
         setSelectedFile(authorization.copia_dni);
         setSelectedTitle("Copia DNI");
+      } else if (authorization.evidencias) {
+        setSelectedFile(authorization.evidencias);
+        setSelectedTitle("Evidencias (Foto Firma)");
       } else {
         setSelectedFile('');
         setSelectedTitle('');
@@ -90,6 +93,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
     autorizacion_respaldo,
     declaracion_jurada,
     copia_dni,
+    evidencias,
   } = authorization;
 
   // Check file presence
@@ -98,6 +102,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
   const hasRespaldo = !!autorizacion_respaldo;
   const hasDeclaracion = !!declaracion_jurada;
   const hasDni = !!copia_dni;
+  const hasEvidencias = !!evidencias;
 
   // Check missing documents
   const missingList = [];
@@ -106,6 +111,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
   if (!hasRespaldo) missingList.push("Autorización Respaldo");
   if (!hasDeclaracion) missingList.push("Declaración Jurada");
   if (!hasDni) missingList.push("Copia DNI");
+  if (!hasEvidencias) missingList.push("Evidencias");
 
   const isComplete = missingList.length === 0;
 
@@ -188,6 +194,16 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
           </div>
         </div>
 
+        {authorization.observaciones && (
+          <div className="alert-box alert-box-warning" style={{ marginTop: '10px', background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+            <AlertTriangle size={24} style={{ flexShrink: 0, color: '#fbbf24' }} />
+            <div style={{ flexGrow: 1 }}>
+              <h4 className="alert-title" style={{ color: '#fbbf24', margin: 0 }}>OBSERVACIÓN REGISTRADA</h4>
+              <p className="alert-desc" style={{ color: '#fef08a', fontStyle: 'italic', fontWeight: 'bold', margin: '4px 0 0 0' }}>"{authorization.observaciones}"</p>
+            </div>
+          </div>
+        )}
+
         <div className="viewer-grid">
           {/* LEFT COLUMN: Metadata & Files list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -227,6 +243,15 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                   <span className="viewer-detail-label">Término Descuento:</span>
                   <span className="viewer-detail-value">{formatMonth(termino_descuento_mes)}/{termino_descuento_anio}</span>
                 </div>
+                
+                {authorization.observaciones && (
+                  <div className="viewer-detail-item" style={{ gridColumn: 'span 2', marginTop: '6px', background: 'rgba(245, 158, 11, 0.05)', padding: '8px', borderRadius: '4px', borderLeft: '3px solid #fbbf24', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span className="viewer-detail-label" style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                      <AlertTriangle size={12} /> Observación:
+                    </span>
+                    <span className="viewer-detail-value" style={{ color: '#fef08a', fontStyle: 'italic', whiteSpace: 'normal', wordBreak: 'break-word' }}>{authorization.observaciones}</span>
+                  </div>
+                )}
                 
                 {/* Historial de Auditoría */}
                 <div style={{ marginTop: '16px', borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -356,6 +381,29 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                 </div>
                 <div className="document-status-right">
                   {hasDni ? (
+                    <span className="badge badge-success" style={{ fontSize: '0.6rem' }}>Disponible</span>
+                  ) : (
+                    <span className="badge badge-warning" style={{ fontSize: '0.6rem' }}>Faltante</span>
+                  )}
+                </div>
+              </button>
+
+              {/* 6. Evidencias */}
+              <button
+                type="button"
+                className={`document-item-select ${!hasEvidencias ? 'missing' : ''} ${selectedFile === evidencias && hasEvidencias ? 'active' : ''}`}
+                onClick={() => hasEvidencias && setSelectedFile(evidencias) && setSelectedTitle("Evidencias (Foto Firma)")}
+                disabled={!hasEvidencias}
+              >
+                <div className="document-info-left">
+                  <FileText size={16} style={{ color: hasEvidencias ? 'var(--color-success)' : 'var(--text-muted)' }} />
+                  <div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>6. Evidencias (Foto Firma)</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Foto del cliente firmando</div>
+                  </div>
+                </div>
+                <div className="document-status-right">
+                  {hasEvidencias ? (
                     <span className="badge badge-success" style={{ fontSize: '0.6rem' }}>Disponible</span>
                   ) : (
                     <span className="badge badge-warning" style={{ fontSize: '0.6rem' }}>Faltante</span>

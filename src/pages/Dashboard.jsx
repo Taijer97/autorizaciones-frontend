@@ -22,6 +22,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tableTab, setTableTab] = useState('all'); // 'all', 'expired', 'expiring'
+  const [observationAlerts, setObservationAlerts] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const canCreateAuth = user ? (user.role === 'superadmin' || user.can_create) : false;
   const canUpdateAuth = user ? (user.role === 'superadmin' || user.can_update) : false;
@@ -61,31 +63,91 @@ const Dashboard = () => {
     }
   }, [user, authLoading, navigate]);
 
-  // Fetch sedes
+  // --- Cache helpers (stale-while-revalidate) ---
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  const getCacheKey = (base, params = {}) => {
+    const sorted = Object.entries(params).filter(([, v]) => v).sort().map(([k, v]) => `${k}=${v}`).join('&');
+    return `cache_${base}${sorted ? '_' + sorted : ''}`;
+  };
+
+  const getCache = (key) => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts > CACHE_TTL) {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+      return data;
+    } catch { return null; }
+  };
+
+  const setCache = (key, data) => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+    } catch { /* quota exceeded, ignore */ }
+  };
+
+  const invalidateCache = (prefix) => {
+    try {
+      const keys = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith(prefix)) keys.push(k);
+      }
+      keys.forEach(k => sessionStorage.removeItem(k));
+    } catch {}
+  };
+
+  // Fetch sedes (with cache)
   const fetchSedes = async () => {
     if (!user) return;
+    const cacheKey = getCacheKey('sedes');
+    const cached = getCache(cacheKey);
+    if (cached) setSedes(cached);
+
     try {
       const response = await fetch('/api/sedes/', {
         headers: { 'Authorization': `Bearer ${user.access_token}` }
       });
+      if (!response.ok) throw new Error('Error al obtener sedes');
       const data = await response.json();
-      if (response.ok) {
-        setSedes(data);
-      }
+      setSedes(data);
+      setCache(cacheKey, data);
     } catch (err) {
       console.error('Error al obtener sedes:', err);
     }
   };
 
-  // Fetch authorizations
-  const fetchAuthorizations = async () => {
+  // Fetch authorizations (with cache)
+  const fetchAuthorizations = async (skipCache = false) => {
     if (!user) return;
-    setLoading(true);
+
+    const params = { dni: searchDni, sede_id: selectedSede, doc_status: selectedStatus };
+    const cacheKey = getCacheKey('auths', params);
+
+    // Show cached data instantly (no loading spinner)
+    const cached = !skipCache ? getCache(cacheKey) : null;
+    if (cached) {
+      setAuthorizations(cached);
+      if (searchDni) {
+        const obs = cached.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
+        setObservationAlerts(obs.length > 0 ? obs : []);
+      } else {
+        setObservationAlerts([]);
+      }
+    }
+
+    // Only show spinner if no cached data available
+    if (!cached) setLoading(true);
     setError('');
+
     try {
       const queryParams = new URLSearchParams();
       if (searchDni) queryParams.append('dni', searchDni);
-      if (selectedSede) queryParams.append('sede_id', selectedSede); // Send sede_id instead of string
+      if (selectedSede) queryParams.append('sede_id', selectedSede);
       if (selectedStatus) queryParams.append('doc_status', selectedStatus);
 
       const response = await fetch(`/api/authorizations/?${queryParams.toString()}`, {
@@ -93,11 +155,23 @@ const Dashboard = () => {
           'Authorization': `Bearer ${user.access_token}`
         }
       });
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || 'Error al obtener autorizaciones');
+        let errMsg = 'Error al obtener autorizaciones';
+        try {
+          const errData = await response.json();
+          errMsg = errData.detail || errMsg;
+        } catch (_) {}
+        throw new Error(errMsg);
       }
+      const data = await response.json();
       setAuthorizations(data);
+      setCache(cacheKey, data);
+      if (searchDni) {
+        const obs = data.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
+        setObservationAlerts(obs.length > 0 ? obs : []);
+      } else {
+        setObservationAlerts([]);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -112,6 +186,11 @@ const Dashboard = () => {
     }
   }, [user, selectedSede, selectedStatus]); // Fetch on filters change
 
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSede, selectedStatus, searchDni, tableTab]);
+
   // Run search when pressing enter or clicking search button
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -124,7 +203,7 @@ const Dashboard = () => {
 
     // Detect websocket url
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws-api`;
 
     console.log(`Conectando a WebSocket en: ${wsUrl}`);
     const socket = new WebSocket(wsUrl);
@@ -165,8 +244,9 @@ const Dashboard = () => {
           setToasts(prev => prev.filter(t => t.id !== id));
         }, 6000);
 
-        // Auto-refresh the list
-        fetchAuthorizations();
+        // Auto-refresh the list (invalidate cache first)
+        invalidateCache('cache_auths');
+        fetchAuthorizations(true);
       } catch (err) {
         console.error('Error al procesar mensaje de WebSocket:', err);
       }
@@ -176,7 +256,7 @@ const Dashboard = () => {
       console.error('Error en WebSocket:', error);
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       console.log('Conexión WebSocket cerrada. Reintentando en 3 segundos...');
       setTimeout(() => {
         setWsTrigger(prev => prev + 1);
@@ -184,9 +264,10 @@ const Dashboard = () => {
     };
 
     return () => {
+      socket.onclose = null;
       socket.close();
     };
-  }, [user, wsTrigger]);
+  }, [user?.access_token, wsTrigger]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Está seguro de que desea eliminar permanentemente este registro y sus archivos escaneados?')) {
@@ -207,7 +288,8 @@ const Dashboard = () => {
       }
       
       // Toast local notification (WebSocket will also trigger one)
-      fetchAuthorizations();
+      invalidateCache('cache_auths');
+      fetchAuthorizations(true);
     } catch (err) {
       alert(err.message);
     }
@@ -290,6 +372,11 @@ const Dashboard = () => {
   const formatMoney = (val) => parseFloat(val).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatMonth = (m) => String(m).padStart(2, '0');
 
+  const filteredAuths = getFilteredTableAuths();
+  const totalPages = Math.ceil(filteredAuths.length / 25);
+  const startIndex = (currentPage - 1) * 25;
+  const paginatedAuths = filteredAuths.slice(startIndex, startIndex + 25);
+
   return (
     <div className="dashboard-layout">
       {/* Header */}
@@ -336,72 +423,57 @@ const Dashboard = () => {
       {/* Main Container */}
       <main className="dashboard-main">
         
-        {/* Statistics Widgets */}
-        <section className="stats-grid">
+        {/* Statistics Widgets - Compact */}
+        <section className="stats-grid-compact">
           
-          <div className="glass-panel stat-card">
-            <div className="stat-icon-wrapper" style={{ background: 'var(--color-info-bg)', color: 'var(--color-info)' }}>
-              <FileText size={24} />
+          <div className="glass-panel stat-card-mini">
+            <div className="stat-icon-mini" style={{ background: 'var(--color-info-bg)', color: 'var(--color-info)' }}>
+              <FileText size={16} />
             </div>
-            <div>
-              <div className="stat-value">{totalRecords}</div>
-              <div className="stat-label">Total Autorizaciones</div>
-            </div>
+            <div className="stat-value-mini">{totalRecords}</div>
+            <div className="stat-label-mini">Total</div>
           </div>
 
-          <div className="glass-panel stat-card">
-            <div className="stat-icon-wrapper" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
-              <CheckCircle2 size={24} />
+          <div className="glass-panel stat-card-mini">
+            <div className="stat-icon-mini" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+              <CheckCircle2 size={16} />
             </div>
-            <div>
-              <div className="stat-value">{completeRecords}</div>
-              <div className="stat-label">Expedientes Completos</div>
-            </div>
+            <div className="stat-value-mini">{completeRecords}</div>
+            <div className="stat-label-mini">Completos</div>
           </div>
 
-          <div className="glass-panel stat-card">
-            <div className="stat-icon-wrapper" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
-              <AlertTriangle size={24} />
+          <div className="glass-panel stat-card-mini">
+            <div className="stat-icon-mini" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
+              <AlertTriangle size={16} />
             </div>
-            <div>
-              <div className="stat-value">{missingOthers}</div>
-              <div className="stat-label">Incompletos (Secundarios)</div>
-            </div>
+            <div className="stat-value-mini">{missingOthers}</div>
+            <div className="stat-label-mini">Incompletos</div>
           </div>
 
-          <div className="glass-panel stat-card" style={{ borderLeft: '3px solid var(--color-danger)' }}>
-            <div className="stat-icon-wrapper" style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
-              <AlertCircle size={24} />
+          <div className="glass-panel stat-card-mini" style={{ borderLeft: '2px solid var(--color-danger)' }}>
+            <div className="stat-icon-mini" style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
+              <AlertCircle size={16} />
             </div>
-            <div>
-              <div className="stat-value">{missingPrincipal}</div>
-              <div className="stat-label">Falta Aut. Principal (Crítico)</div>
-            </div>
+            <div className="stat-value-mini">{missingPrincipal}</div>
+            <div className="stat-label-mini">Falta Principal</div>
           </div>
 
-        </section>
-
-        {/* Expiration warning cards */}
-        <section className="stats-grid-two-columns" style={{ marginTop: '-15px' }}>
-          <div className="glass-panel stat-card" style={{ borderLeft: '3px solid var(--color-danger)' }}>
-            <div className="stat-icon-wrapper" style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
-              <Clock size={24} />
+          <div className="glass-panel stat-card-mini" style={{ borderLeft: '2px solid var(--color-danger)' }}>
+            <div className="stat-icon-mini" style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
+              <Clock size={16} />
             </div>
-            <div>
-              <div className="stat-value">{expiredCount}</div>
-              <div className="stat-label" style={{ fontWeight: 'bold' }}>Autorizaciones Vencidas (Revisar inmediatamente)</div>
-            </div>
+            <div className="stat-value-mini">{expiredCount}</div>
+            <div className="stat-label-mini">Vencidas</div>
           </div>
 
-          <div className="glass-panel stat-card" style={{ borderLeft: '3px solid var(--color-warning)' }}>
-            <div className="stat-icon-wrapper" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
-              <Calendar size={24} />
+          <div className="glass-panel stat-card-mini" style={{ borderLeft: '2px solid var(--color-warning)' }}>
+            <div className="stat-icon-mini" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
+              <Calendar size={16} />
             </div>
-            <div>
-              <div className="stat-value">{expiringCount}</div>
-              <div className="stat-label" style={{ fontWeight: 'bold' }}>Autorizaciones Por Vencer (Próximo mes)</div>
-            </div>
+            <div className="stat-value-mini">{expiringCount}</div>
+            <div className="stat-label-mini">Por Vencer</div>
           </div>
+
         </section>
 
         {/* Search & Filters */}
@@ -496,12 +568,7 @@ const Dashboard = () => {
           </div>
 
           <div className="table-wrapper">
-            {loading ? (
-              <div className="no-data-card" style={{ padding: '80px' }}>
-                <Loader2 size={32} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                <span>Cargando registros...</span>
-              </div>
-            ) : getFilteredTableAuths().length === 0 ? (
+            {filteredAuths.length === 0 && !loading ? (
               <div className="no-data-card">
                 <FileText size={48} style={{ color: 'var(--text-muted)' }} />
                 <h3>No se encontraron registros</h3>
@@ -524,122 +591,227 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {getFilteredTableAuths().map((auth) => {
-                    const hasP = !!auth.autorizacion_principal;
-                    const hasD = !!auth.autorizacion_duplicado;
-                    const hasR = !!auth.autorizacion_respaldo;
-                    const hasDec = !!auth.declaracion_jurada;
-                    const hasDni = !!auth.copia_dni;
-                    
-                    return (
-                      <tr key={auth.id} className={getRowClass(auth)}>
-                        <td style={{ fontWeight: 700 }}>{auth.dni}</td>
-                        <td style={{ fontWeight: 500 }}>{auth.apellidos_nombres}</td>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={idx}>
+                        <td><div className="skeleton-element" style={{ width: '80px', height: '16px' }}></div></td>
                         <td>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Building2 size={12} style={{ color: 'var(--text-secondary)' }} />
-                            {auth.sede}
-                          </span>
+                          <div className="skeleton-element" style={{ width: '180px', height: '16px', marginBottom: '6px' }}></div>
+                          <div className="skeleton-element" style={{ width: '120px', height: '12px' }}></div>
                         </td>
-                        <td>{formatMonth(auth.inicio_descuento_mes)}/{auth.inicio_descuento_anio}</td>
+                        <td><div className="skeleton-element" style={{ width: '90px', height: '16px' }}></div></td>
+                        <td><div className="skeleton-element" style={{ width: '60px', height: '16px' }}></div></td>
+                        <td><div className="skeleton-element" style={{ width: '70px', height: '16px' }}></div></td>
+                        <td><div className="skeleton-element" style={{ width: '70px', height: '16px' }}></div></td>
+                        <td><div className="skeleton-element" style={{ width: '80px', height: '16px' }}></div></td>
+                        <td><div className="skeleton-element" style={{ width: '95px', height: '16px' }}></div></td>
                         <td>
-                          <span className="badge badge-info" style={{ fontWeight: 'normal' }}>
-                            {auth.num_cuotas} cuotas
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 600 }}>
-                          <div>{formatMonth(auth.termino_descuento_mes)}/{auth.termino_descuento_anio}</div>
-                          {(() => {
-                            const currentDate = new Date();
-                            const currentYear = currentDate.getFullYear();
-                            const currentMonth = currentDate.getMonth() + 1;
-                            const diffMonths = (auth.termino_descuento_anio - currentYear) * 12 + (auth.termino_descuento_mes - currentMonth);
-                            
-                            if (diffMonths < 0) {
-                              return <span style={{ fontSize: '0.65rem', color: '#fca5a5', background: 'rgba(239, 68, 68, 0.25)', border: '1px solid rgba(239, 68, 68, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>VENCIDA</span>;
-                            } else if (diffMonths <= 1) {
-                              return <span style={{ fontSize: '0.65rem', color: '#fde047', background: 'rgba(245, 158, 11, 0.25)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>1 MES A VENCER</span>;
-                            }
-                            return null;
-                          })()}
-                        </td>
-                        <td>S/. {formatMoney(auth.monto_mensual)}</td>
-                        <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>S/. {formatMoney(auth.monto_total)}</td>
-                        
-                        {/* File checkdots group */}
-                        <td>
-                          <div className="file-dots-group">
-                            <span 
-                              className="file-dot-item" 
-                              style={{ background: hasP ? 'var(--color-success)' : 'var(--color-danger)' }}
-                              data-tooltip={hasP ? "1. Principal: OK" : "1. Principal: FALTANTE"}
-                            />
-                            <span 
-                              className="file-dot-item" 
-                              style={{ background: hasD ? 'var(--color-success)' : 'var(--color-warning)' }}
-                              data-tooltip={hasD ? "2. Duplicado: OK" : "2. Duplicado: FALTANTE"}
-                            />
-                            <span 
-                              className="file-dot-item" 
-                              style={{ background: hasR ? 'var(--color-success)' : 'var(--color-warning)' }}
-                              data-tooltip={hasR ? "3. Respaldo: OK" : "3. Respaldo: FALTANTE"}
-                            />
-                            <span 
-                              className="file-dot-item" 
-                              style={{ background: hasDec ? 'var(--color-success)' : 'var(--color-warning)' }}
-                              data-tooltip={hasDec ? "4. Declaración Jurada: OK" : "4. Declaración Jurada: FALTANTE"}
-                            />
-                            <span 
-                              className="file-dot-item" 
-                              style={{ background: hasDni ? 'var(--color-success)' : 'var(--color-warning)' }}
-                              data-tooltip={hasDni ? "5. Copia DNI: OK" : "5. Copia DNI: FALTANTE"}
-                            />
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {Array.from({ length: 6 }).map((_, sIdx) => (
+                              <div key={sIdx} className="skeleton-element" style={{ width: '8px', height: '8px', borderRadius: '50%' }}></div>
+                            ))}
                           </div>
                         </td>
-
-                        {/* Action buttons cell */}
-                        <td style={{ paddingRight: '24px' }}>
-                          <div className="actions-cell">
-                            <button 
-                              className="btn btn-secondary btn-icon" 
-                              style={{ width: '32px', height: '32px' }}
-                              onClick={() => openViewerModal(auth)}
-                              title="Consultar Documentos"
-                            >
-                              <Eye size={14} />
-                            </button>
-
-                            <>
-                              {canUpdateAuth && (
-                                <button 
-                                  className="btn btn-secondary btn-icon" 
-                                  style={{ width: '32px', height: '32px', borderColor: 'rgba(99,102,241,0.2)' }}
-                                  onClick={() => openEditModal(auth)}
-                                  title="Editar"
-                                >
-                                  <Edit size={14} style={{ color: 'var(--accent-primary)' }} />
-                                </button>
-                              )}
-                              {canDeleteAuth && (
-                                <button 
-                                  className="btn btn-danger btn-icon" 
-                                  style={{ width: '32px', height: '32px' }}
-                                  onClick={() => handleDelete(auth.id)}
-                                  title="Eliminar"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </>
+                        <td>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <div className="skeleton-element" style={{ width: '32px', height: '32px', borderRadius: '50%' }}></div>
+                            <div className="skeleton-element" style={{ width: '32px', height: '32px', borderRadius: '50%' }}></div>
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  ) : (
+                    paginatedAuths.map((auth) => {
+                      const hasP = !!auth.autorizacion_principal;
+                      const hasD = !!auth.autorizacion_duplicado;
+                      const hasR = !!auth.autorizacion_respaldo;
+                      const hasDec = !!auth.declaracion_jurada;
+                      const hasDni = !!auth.copia_dni;
+                      const hasEvidencias = !!auth.evidencias;
+                      
+                      return (
+                        <tr key={auth.id} className={getRowClass(auth)}>
+                          <td style={{ fontWeight: 700 }}>{auth.dni}</td>
+                          <td style={{ fontWeight: 500 }}>
+                            <div>{auth.apellidos_nombres}</div>
+                            {auth.observaciones && (
+                              <div style={{ fontSize: '0.75rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '4px', fontWeight: 600 }}>
+                                <AlertTriangle size={12} />
+                                <span>Obs: {auth.observaciones}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Building2 size={12} style={{ color: 'var(--text-secondary)' }} />
+                              {auth.sede}
+                            </span>
+                          </td>
+                          <td>{formatMonth(auth.inicio_descuento_mes)}/{auth.inicio_descuento_anio}</td>
+                          <td>
+                            <span className="badge badge-info" style={{ fontWeight: 'normal' }}>
+                              {auth.num_cuotas} cuotas
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 600 }}>
+                            <div>{formatMonth(auth.termino_descuento_mes)}/{auth.termino_descuento_anio}</div>
+                            {(() => {
+                              const currentDate = new Date();
+                              const currentYear = currentDate.getFullYear();
+                              const currentMonth = currentDate.getMonth() + 1;
+                              const diffMonths = (auth.termino_descuento_anio - currentYear) * 12 + (auth.termino_descuento_mes - currentMonth);
+                              
+                              if (diffMonths < 0) {
+                                return <span style={{ fontSize: '0.65rem', color: '#fca5a5', background: 'rgba(239, 68, 68, 0.25)', border: '1px solid rgba(239, 68, 68, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>VENCIDA</span>;
+                              } else if (diffMonths <= 1) {
+                                return <span style={{ fontSize: '0.65rem', color: '#fde047', background: 'rgba(245, 158, 11, 0.25)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>1 MES A VENCER</span>;
+                              }
+                              return null;
+                            })()}
+                          </td>
+                          <td>S/. {formatMoney(auth.monto_mensual)}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>S/. {formatMoney(auth.monto_total)}</td>
+                          
+                          {/* File checkdots group */}
+                          <td>
+                            <div className="file-dots-group">
+                              <span 
+                                className="file-dot-item" 
+                                style={{ background: hasP ? 'var(--color-success)' : 'var(--color-danger)' }}
+                                data-tooltip={hasP ? "1. Principal: OK" : "1. Principal: FALTANTE"}
+                              />
+                              <span 
+                                className="file-dot-item" 
+                                style={{ background: hasD ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                data-tooltip={hasD ? "2. Duplicado: OK" : "2. Duplicado: FALTANTE"}
+                              />
+                              <span 
+                                className="file-dot-item" 
+                                style={{ background: hasR ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                data-tooltip={hasR ? "3. Respaldo: OK" : "3. Respaldo: FALTANTE"}
+                              />
+                              <span 
+                                className="file-dot-item" 
+                                style={{ background: hasDec ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                data-tooltip={hasDec ? "4. Declaración Jurada: OK" : "4. Declaración Jurada: FALTANTE"}
+                              />
+                              <span 
+                                className="file-dot-item" 
+                                style={{ background: hasDni ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                data-tooltip={hasDni ? "5. Copia DNI: OK" : "5. Copia DNI: FALTANTE"}
+                              />
+                              <span 
+                                className="file-dot-item" 
+                                style={{ background: hasEvidencias ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                data-tooltip={hasEvidencias ? "6. Evidencias: OK" : "6. Evidencias: FALTANTE"}
+                              />
+                            </div>
+                          </td>
+  
+                          {/* Action buttons cell */}
+                          <td style={{ paddingRight: '24px' }}>
+                            <div className="actions-cell">
+                              <button 
+                                className="btn btn-secondary btn-icon" 
+                                style={{ width: '32px', height: '32px' }}
+                                onClick={() => openViewerModal(auth)}
+                                title="Consultar Documentos"
+                              >
+                                <Eye size={14} />
+                              </button>
+  
+                              <>
+                                {canUpdateAuth && (
+                                  <button 
+                                    className="btn btn-secondary btn-icon" 
+                                    style={{ width: '32px', height: '32px', borderColor: 'rgba(99,102,241,0.2)' }}
+                                    onClick={() => openEditModal(auth)}
+                                    title="Editar"
+                                  >
+                                    <Edit size={14} style={{ color: 'var(--accent-primary)' }} />
+                                  </button>
+                                )}
+                                {canDeleteAuth && (
+                                  <button 
+                                    className="btn btn-danger btn-icon" 
+                                    style={{ width: '32px', height: '32px' }}
+                                    onClick={() => handleDelete(auth.id)}
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {filteredAuths.length > 0 && !loading && (
+            <div className="pagination-controls" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '16px',
+              paddingTop: '16px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Mostrando <b>{startIndex + 1}</b> a <b>{Math.min(startIndex + 25, filteredAuths.length)}</b> de <b>{filteredAuths.length}</b> registros
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                >
+                  Anterior
+                </button>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {Array.from({ length: totalPages }).map((_, idx) => {
+                    const pageNum = idx + 1;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        className={`btn ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setCurrentPage(pageNum)}
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          padding: 0,
+                          fontSize: '0.8rem',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
       </main>
@@ -648,7 +820,7 @@ const Dashboard = () => {
       <AuthorizationForm
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        onSave={fetchAuthorizations}
+        onSave={() => { invalidateCache('cache_auths'); fetchAuthorizations(true); }}
         authorization={editingAuth}
         token={user.access_token}
       />
@@ -658,6 +830,77 @@ const Dashboard = () => {
         onClose={() => setIsViewerOpen(false)}
         authorization={viewingAuth}
       />
+
+      {observationAlerts.length > 0 && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content glass-panel" style={{ maxWidth: '500px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid rgba(245, 158, 11, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24' }}>
+                <AlertTriangle size={24} />
+                <h2 className="modal-title" style={{ fontSize: '1.25rem', color: '#fbbf24', margin: 0 }}>Alerta de Observación</h2>
+              </div>
+              <button className="modal-close-btn" onClick={() => setObservationAlerts([])}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                Se encontraron observaciones pendientes para el DNI consultado:
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+                {observationAlerts.map(auth => (
+                  <div key={auth.id} className="glass-panel" style={{ padding: '14px', background: 'rgba(245, 158, 11, 0.05)', borderColor: 'rgba(245, 158, 11, 0.2)', borderRadius: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>
+                        Sede: {auth.sede} | {auth.apellidos_nombres}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.95rem', color: '#fef08a', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', borderLeft: '3px solid #fbbf24', fontStyle: 'italic', marginBottom: '12px' }}>
+                      "{auth.observaciones}"
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ background: 'var(--color-success)', borderColor: 'var(--color-success)', color: '#fff', fontSize: '0.8rem', padding: '6px 12px', gap: '4px' }}
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/authorizations/${auth.id}/clear-observation`, {
+                              method: 'POST',
+                              headers: { 'Authorization': `Bearer ${user.access_token}` }
+                            });
+                            if (!res.ok) {
+                              const errData = await res.json();
+                              throw new Error(errData.detail || 'Error al completar la observación');
+                            }
+                            // Remove from local list
+                            setObservationAlerts(prev => prev.filter(item => item.id !== auth.id));
+                            // Refresh list
+                            invalidateCache('cache_auths');
+                            fetchAuthorizations(true);
+                          } catch (err) {
+                            alert(err.message);
+                          }
+                        }}
+                      >
+                        <CheckCircle2 size={14} />
+                        Observación Completada
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="form-actions" style={{ marginTop: 0, paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <button className="btn btn-secondary" onClick={() => setObservationAlerts([])}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Real-time WebSocket Toasts floating at bottom-right */}
       <div className="toast-container">
@@ -675,6 +918,25 @@ const Dashboard = () => {
         ))}
       </div>
 
+      {/* Skeleton and custom styles */}
+      <style>{`
+        @keyframes skeleton-shimmer {
+          0% {
+            background-color: rgba(255, 255, 255, 0.03);
+          }
+          50% {
+            background-color: rgba(255, 255, 255, 0.09);
+          }
+          100% {
+            background-color: rgba(255, 255, 255, 0.03);
+          }
+        }
+        .skeleton-element {
+          animation: skeleton-shimmer 1.5s infinite ease-in-out;
+          background-color: rgba(255, 255, 255, 0.03);
+          border-radius: 4px;
+        }
+      `}</style>
     </div>
   );
 };

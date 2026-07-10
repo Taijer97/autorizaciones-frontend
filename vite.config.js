@@ -12,7 +12,7 @@ export default defineConfig({
         target: 'http://127.0.0.1:8002',
         changeOrigin: true
       },
-      '/ws': {
+      '/ws-api': {
         target: 'ws://127.0.0.1:8002',
         ws: true,
         changeOrigin: true
