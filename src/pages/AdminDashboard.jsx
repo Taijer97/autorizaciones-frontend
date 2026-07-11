@@ -363,7 +363,7 @@ const AdminDashboard = () => {
                   onClick={() => { setActiveTab('users'); setError(''); setSuccess(''); }}
                 >
                   <Users size={16} />
-                  <span>Operadores / Usuarios</span>
+                  <span>Trabajadores / Usuarios</span>
                 </button>
                 <button 
                   className={`tab-btn ${activeTab === 'sedes' ? 'active' : ''}`}
@@ -449,11 +449,11 @@ const AdminDashboard = () => {
 
         {activeTab === 'users' && user && user.role === 'superadmin' && (
           /* USERS MANAGEMENT TAB */
-          <div className="admin-content-grid" style={{ gridTemplateColumns: '360px 1fr' }}>
+          <div className="admin-content-grid">
             {/* User Form Card */}
             <div className="glass-panel admin-card">
               <h2 className="admin-card-title">
-                <Key size={18} /> {editingUserId ? 'Editar Operador' : 'Nuevo Operador'}
+                <Key size={18} /> {editingUserId ? 'Editar Trabajador' : 'Nuevo Trabajador'}
               </h2>
               <form onSubmit={handleUserFormSubmit}>
                 <div className="form-group">
@@ -526,7 +526,7 @@ const AdminDashboard = () => {
                     onChange={(e) => setRole(e.target.value)}
                     disabled={loading}
                   >
-                    <option value="user">Operador (Permisos personalizados)</option>
+                    <option value="user">Trabajador (Permisos personalizados)</option>
                     <option value="admin">Administrador (Solo Exportación Masiva)</option>
                     <option value="superadmin">Superadministrador (Acceso total)</option>
                   </select>

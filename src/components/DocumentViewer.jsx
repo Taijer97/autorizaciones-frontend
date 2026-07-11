@@ -5,10 +5,11 @@ import {
 } from 'lucide-react';
 import './DocumentViewer.css';
 
-const DocumentViewer = ({ isOpen, onClose, authorization }) => {
+const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
   const [selectedFile, setSelectedFile] = useState('');
   const [selectedTitle, setSelectedTitle] = useState('');
   const [imageZoom, setImageZoom] = useState(1);
+  const [activeAuth, setActiveAuth] = useState(null);
 
   // Reset zoom when selected file changes
   useEffect(() => {
@@ -44,26 +45,55 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
     };
   }, [selectedFile]);
 
-  // Reset or select default file on authorization change
+  // Fetch fresh data from backend to bypass frontend cache when opening the viewer
   useEffect(() => {
     if (authorization && isOpen) {
-      if (authorization.autorizacion_principal) {
-        setSelectedFile(authorization.autorizacion_principal);
+      setActiveAuth(authorization);
+
+      const fetchFreshAuth = async () => {
+        if (!token) return;
+        try {
+          const response = await fetch(`/api/authorizations/${authorization.id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setActiveAuth(data);
+          }
+        } catch (err) {
+          console.error('Error al obtener la autorización fresca:', err);
+        }
+      };
+
+      fetchFreshAuth();
+    } else {
+      setActiveAuth(null);
+    }
+  }, [authorization, isOpen, token]);
+
+  // Reset or select default file on activeAuth change
+  useEffect(() => {
+    const current = activeAuth || authorization;
+    if (current && isOpen) {
+      if (current.autorizacion_principal) {
+        setSelectedFile(current.autorizacion_principal);
         setSelectedTitle("Autorización Principal");
-      } else if (authorization.autorizacion_duplicado) {
-        setSelectedFile(authorization.autorizacion_duplicado);
+      } else if (current.autorizacion_duplicado) {
+        setSelectedFile(current.autorizacion_duplicado);
         setSelectedTitle("Autorización Duplicado");
-      } else if (authorization.autorizacion_respaldo) {
-        setSelectedFile(authorization.autorizacion_respaldo);
+      } else if (current.autorizacion_respaldo) {
+        setSelectedFile(current.autorizacion_respaldo);
         setSelectedTitle("Autorización Respaldo");
-      } else if (authorization.declaracion_jurada) {
-        setSelectedFile(authorization.declaracion_jurada);
+      } else if (current.declaracion_jurada) {
+        setSelectedFile(current.declaracion_jurada);
         setSelectedTitle("Declaración Jurada");
-      } else if (authorization.copia_dni) {
-        setSelectedFile(authorization.copia_dni);
+      } else if (current.copia_dni) {
+        setSelectedFile(current.copia_dni);
         setSelectedTitle("Copia DNI");
-      } else if (authorization.evidencias) {
-        setSelectedFile(authorization.evidencias);
+      } else if (current.evidencias) {
+        setSelectedFile(current.evidencias);
         setSelectedTitle("Evidencias (Foto Firma)");
       } else {
         setSelectedFile('');
@@ -73,9 +103,11 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
       setSelectedFile('');
       setSelectedTitle('');
     }
-  }, [authorization, isOpen]);
+  }, [activeAuth, authorization, isOpen]);
 
   if (!isOpen || !authorization) return null;
+
+  const currentAuth = activeAuth || authorization;
 
   const {
     dni,
@@ -94,7 +126,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
     declaracion_jurada,
     copia_dni,
     evidencias,
-  } = authorization;
+  } = currentAuth;
 
   // Check file presence
   const hasPrincipal = !!autorizacion_principal;
@@ -194,12 +226,12 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
           </div>
         </div>
 
-        {authorization.observaciones && (
+        {currentAuth.observaciones && (
           <div className="alert-box alert-box-warning" style={{ marginTop: '10px', background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
             <AlertTriangle size={24} style={{ flexShrink: 0, color: '#fbbf24' }} />
             <div style={{ flexGrow: 1 }}>
               <h4 className="alert-title" style={{ color: '#fbbf24', margin: 0 }}>OBSERVACIÓN REGISTRADA</h4>
-              <p className="alert-desc" style={{ color: '#fef08a', fontStyle: 'italic', fontWeight: 'bold', margin: '4px 0 0 0' }}>"{authorization.observaciones}"</p>
+              <p className="alert-desc" style={{ color: '#fef08a', fontStyle: 'italic', fontWeight: 'bold', margin: '4px 0 0 0' }}>"{currentAuth.observaciones}"</p>
             </div>
           </div>
         )}
@@ -244,12 +276,12 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                   <span className="viewer-detail-value">{formatMonth(termino_descuento_mes)}/{termino_descuento_anio}</span>
                 </div>
                 
-                {authorization.observaciones && (
+                {currentAuth.observaciones && (
                   <div className="viewer-detail-item" style={{ gridColumn: 'span 2', marginTop: '6px', background: 'rgba(245, 158, 11, 0.05)', padding: '8px', borderRadius: '4px', borderLeft: '3px solid #fbbf24', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="viewer-detail-label" style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
                       <AlertTriangle size={12} /> Observación:
                     </span>
-                    <span className="viewer-detail-value" style={{ color: '#fef08a', fontStyle: 'italic', whiteSpace: 'normal', wordBreak: 'break-word' }}>{authorization.observaciones}</span>
+                    <span className="viewer-detail-value" style={{ color: '#fef08a', fontStyle: 'italic', whiteSpace: 'normal', wordBreak: 'break-word' }}>{currentAuth.observaciones}</span>
                   </div>
                 )}
                 
@@ -257,13 +289,13 @@ const DocumentViewer = ({ isOpen, onClose, authorization }) => {
                 <div style={{ marginTop: '16px', borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                     <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Registrado por:</span><br/>
-                    👤 {authorization.creator_name || 'Sistema'}<br/>
-                    📅 {new Date(authorization.fecha_registro).toLocaleString('es-PE')}
+                    👤 {currentAuth.creator_name || 'Sistema'}<br/>
+                    📅 {new Date(currentAuth.fecha_registro).toLocaleString('es-PE')}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                     <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Última modificación:</span><br/>
-                    👤 {authorization.updater_name || authorization.creator_name || 'Sistema'}<br/>
-                    📅 {new Date(authorization.fecha_actualizacion).toLocaleString('es-PE')}
+                    👤 {currentAuth.updater_name || currentAuth.creator_name || 'Sistema'}<br/>
+                    📅 {new Date(currentAuth.fecha_actualizacion).toLocaleString('es-PE')}
                   </div>
                 </div>
               </div>

@@ -66,6 +66,29 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   const [error, setError] = useState('');
   const [reniecLoading, setReniecLoading] = useState(false);
   const [initialDni, setInitialDni] = useState('');
+  const [loadingMessage, setLoadingMessage] = useState('Guardando cambios...');
+
+  // Dynamically change loading message during saving
+  useEffect(() => {
+    let interval;
+    if (submitting || loading) {
+      const messages = [
+        'Procesando datos del formulario...',
+        'Comprimiendo y preparando imágenes...',
+        'Subiendo archivos escaneados...',
+        'Validando firmas y evidencias...',
+        'Guardando en la base de datos...',
+        'Sincronizando información...'
+      ];
+      let i = 0;
+      setLoadingMessage(messages[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % messages.length;
+        setLoadingMessage(messages[i]);
+      }, 1600);
+    }
+    return () => clearInterval(interval);
+  }, [submitting, loading]);
 
   // Populate data when editing
   useEffect(() => {
@@ -953,6 +976,18 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {/* Saving Loader Overlay */}
+      {(submitting || loading) && (
+        <div className="saving-loader-overlay">
+          <div className="saving-loader-card glass-panel" style={{ background: '#111827' }}>
+            <div className="saving-spinner-ring">
+              <div className="saving-spinner-glow"></div>
+            </div>
+            <h3 className="saving-loader-title">Guardando Autorización</h3>
+            <p className="saving-loader-text">{loadingMessage}</p>
           </div>
         </div>
       )}

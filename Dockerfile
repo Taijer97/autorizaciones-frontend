@@ -16,7 +16,7 @@ COPY --from=build30008 /app/dist /usr/share/nginx/html
 # Create nginx config with proxy for /api, /ws, /uploads to backend
 RUN rm /etc/nginx/conf.d/default.conf
 RUN echo 'server { \
-    listen 3002;
+    listen 3002; \
     client_max_body_size 50M; \
     server_name _; \
     client_max_body_size 50M; \

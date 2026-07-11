@@ -105,7 +105,7 @@ const Register = () => {
             alt="Logo CB" 
             style={{ maxHeight: '80px', maxWidth: '240px', marginBottom: '16px', objectFit: 'contain' }} 
           />
-          <h1 className="login-title" style={{ fontSize: '1.7rem', fontWeight: 800 }}>Registro de Operador</h1>
+          <h1 className="login-title" style={{ fontSize: '1.7rem', fontWeight: 800 }}>Registro de Trabajador</h1>
           <p className="login-subtitle">Cree una cuenta para acceder a la gestión de autorizaciones</p>
         </div>
 

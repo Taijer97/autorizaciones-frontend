@@ -76,8 +76,22 @@
   }
 }
 
+.table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap; /* Prevents text wrap and forces scrollbar */
+}
+
 .admin-card {
   padding: 24px;
+  min-width: 0; /* Prevents CSS grid child from stretching */
+  overflow: hidden; /* Ensures contents stay within card bounds */
 }
 
 .admin-card-title {
@@ -262,3 +276,75 @@
   color: var(--text-muted);
   border: 1px solid var(--border-color);
 }
+
+/* Extra mobile improvements for Admin Panel */
+@media (max-width: 600px) {
+  .admin-main {
+    padding: 12px;
+    gap: 16px;
+  }
+
+  .admin-nav-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .admin-tabs {
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+    gap: 6px;
+  }
+
+  .tab-btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    flex-grow: 1;
+    justify-content: center;
+  }
+
+  .admin-card {
+    padding: 16px;
+  }
+
+  .admin-card-title {
+    font-size: 1rem;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+  }
+
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  .sedes-checkbox-grid {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  /* Table styling for mobile list */
+  .custom-table th {
+    padding: 10px 8px;
+    font-size: 0.65rem;
+  }
+
+  .custom-table td {
+    padding: 10px 8px;
+    font-size: 0.78rem;
+  }
+
+  .perms-inline-list {
+    gap: 4px;
+  }
+
+  .perm-inline-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 0.62rem;
+  }
+
+  .user-sedes-badges {
+    max-width: 150px;
+  }
+}
+

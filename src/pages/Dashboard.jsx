@@ -401,7 +401,7 @@ const Dashboard = () => {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span className="profile-name">{user.full_name}</span>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Shield size={10} /> {user.role === 'superadmin' ? 'Superadmin' : user.role === 'admin' ? 'Administrador' : 'Operador'}
+                <Shield size={10} /> {user.role === 'superadmin' ? 'Superadmin' : user.role === 'admin' ? 'Administrador' : 'Trabajador'}
               </span>
             </div>
           </div>
@@ -829,6 +829,7 @@ const Dashboard = () => {
         isOpen={isViewerOpen}
         onClose={() => setIsViewerOpen(false)}
         authorization={viewingAuth}
+        token={user.access_token}
       />
 
       {observationAlerts.length > 0 && (
