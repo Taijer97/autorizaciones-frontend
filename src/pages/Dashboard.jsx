@@ -121,6 +121,16 @@ const Dashboard = () => {
     }
   };
 
+  // Helper to sort authorizations alphabetically by Apellidos y Nombres
+  const sortData = (list) => {
+    if (!list) return [];
+    return [...list].sort((a, b) => {
+      const nameA = (a.apellidos_nombres || '').trim().toUpperCase();
+      const nameB = (b.apellidos_nombres || '').trim().toUpperCase();
+      return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+    });
+  };
+
   // Fetch authorizations (with cache)
   const fetchAuthorizations = async (skipCache = false) => {
     if (!user) return;
@@ -131,9 +141,10 @@ const Dashboard = () => {
     // Show cached data instantly (no loading spinner)
     const cached = !skipCache ? getCache(cacheKey) : null;
     if (cached) {
-      setAuthorizations(cached);
+      const sortedCached = sortData(cached);
+      setAuthorizations(sortedCached);
       if (searchDni) {
-        const obs = cached.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
+        const obs = sortedCached.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
         setObservationAlerts(obs.length > 0 ? obs : []);
       } else {
         setObservationAlerts([]);
@@ -164,10 +175,11 @@ const Dashboard = () => {
         throw new Error(errMsg);
       }
       const data = await response.json();
-      setAuthorizations(data);
-      setCache(cacheKey, data);
+      const sortedData = sortData(data);
+      setAuthorizations(sortedData);
+      setCache(cacheKey, sortedData);
       if (searchDni) {
-        const obs = data.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
+        const obs = sortedData.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
         setObservationAlerts(obs.length > 0 ? obs : []);
       } else {
         setObservationAlerts([]);
