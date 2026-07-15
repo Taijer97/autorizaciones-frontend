@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, FileText, Loader2, Calendar, DollarSign, Camera, Trash2, Image } from 'lucide-react';
+import { X, Upload, FileText, Loader2, Calendar, DollarSign, Camera, Trash2, Image as ImageIcon, CheckCircle2, AlertOctagon } from 'lucide-react';
 import './AuthorizationForm.css';
 
 const MESES = [
@@ -67,6 +67,38 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   const [reniecLoading, setReniecLoading] = useState(false);
   const [initialDni, setInitialDni] = useState('');
   const [loadingMessage, setLoadingMessage] = useState('Guardando cambios...');
+  const [fileNotification, setFileNotification] = useState({ show: false, message: '', type: 'success' });
+
+  const triggerFileNotification = (message, type = 'success') => {
+    setFileNotification({ show: true, message, type });
+    // Auto-dismiss after 3.5 seconds
+    setTimeout(() => {
+      setFileNotification(prev => ({ ...prev, show: false }));
+    }, 4500); // 4.5s so users can read longer error messages
+  };
+
+  // Validate file types and size (Max 15MB for heavy office scanners)
+  const validateFile = (file) => {
+    if (!file) return null;
+    
+    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'tiff', 'tif'];
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || fileExtension === 'pdf';
+    const isAllowedExtension = allowedExtensions.includes(fileExtension);
+    
+    if (!isPdf && !isImage && !isAllowedExtension) {
+      return 'Formato no compatible. Solo se permiten PDF o imágenes (JPG, PNG, WEBP, TIFF).';
+    }
+    
+    const MAX_SIZE = 15 * 1024 * 1024; // 15 Megabytes
+    if (file.size > MAX_SIZE) {
+      return `El archivo "${file.name}" supera el límite de 15MB. Escanéelo en menor calidad (150-200 DPI).`;
+    }
+    
+    return null;
+  };
 
   // Dynamically change loading message during saving
   useEffect(() => {
@@ -234,6 +266,9 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
         canvas.toBlob((blob) => {
           resolve(new File([blob], file.name, { type: 'image/jpeg' }));
         }, 'image/jpeg', quality);
+      };
+      img.onerror = () => {
+        resolve(file); // fallback to original file if decoding fails
       };
       img.src = URL.createObjectURL(file);
     });
@@ -408,6 +443,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
       if (activeDocForCamera === 'dni') { setFileDni(file); setDelDni(false); }
       if (activeDocForCamera === 'evidencias') { setFileEvidencias(file); setDelEvidencias(false); }
       
+      triggerFileNotification(`Fotografía guardada correctamente`, 'success');
       stopCamera();
     }
   };
@@ -421,6 +457,11 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) {
+      const errorMsg = validateFile(file);
+      if (errorMsg) {
+        triggerFileNotification(errorMsg, 'error');
+        return;
+      }
       const compressed = await compressImage(file);
       if (docType === 'principal') { setFilePrincipal(compressed); setDelPrincipal(false); }
       if (docType === 'duplicado') { setFileDuplicado(compressed); setDelDuplicado(false); }
@@ -428,6 +469,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
       if (docType === 'declaracion') { setFileDeclaracion(compressed); setDelDeclaracion(false); }
       if (docType === 'dni') { setFileDni(compressed); setDelDni(false); }
       if (docType === 'evidencias') { setFileEvidencias(compressed); setDelEvidencias(false); }
+      triggerFileNotification(`Archivo "${file.name}" cargado correctamente`, 'success');
     }
   };
 
@@ -541,19 +583,27 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
                 id={`file-input-${docKey}`}
                 type="file"
                 style={{ display: 'none' }}
-                accept=".pdf,.png,.jpg,.jpeg"
+                accept=".pdf,image/*"
+                onClick={(e) => e.stopPropagation()}
                 onChange={async (e) => {
-                  if (e.target.files[0]) {
-                    const compressed = await compressImage(e.target.files[0]);
+                  const file = e.target.files[0];
+                  if (file) {
+                    const errorMsg = validateFile(file);
+                    if (errorMsg) {
+                      triggerFileNotification(errorMsg, 'error');
+                      return;
+                    }
+                    const compressed = await compressImage(file);
                     setFileState(compressed);
                     setDelState(false);
+                    triggerFileNotification(`Archivo "${file.name}" cargado correctamente`, 'success');
                   }
                 }}
               />
             </div>
 
             {/* Actions: Camera */}
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div className="camera-only-mobile">
               <button
                 type="button"
                 onClick={() => openCameraModal(docKey)}
@@ -584,7 +634,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
             {fileState && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 6px', borderRadius: '4px' }}>
                 <span style={{ fontSize: '0.68rem', color: '#34d399', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Image size={12} /> {fileState.name}
+                  <ImageIcon size={12} /> {fileState.name}
                 </span>
                 <button
                   type="button"
@@ -610,7 +660,11 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   };
 
   return (
-    <div className="modal-overlay">
+    <div 
+      className="modal-overlay"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => e.preventDefault()}
+    >
       <div className="modal-content glass-panel">
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'Editar Autorización' : 'Nueva Autorización'}</h2>
@@ -618,6 +672,28 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
             <X size={20} />
           </button>
         </div>
+
+        {fileNotification.show && (
+          <div 
+            style={{
+              background: fileNotification.type === 'error' ? 'var(--color-danger-bg)' : 'var(--color-success-bg)',
+              border: `1px solid ${fileNotification.type === 'error' ? 'var(--color-danger-border)' : 'var(--color-success-border)'}`,
+              color: fileNotification.type === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '16px',
+              animation: 'fadeInLoader 0.3s ease-out',
+              fontWeight: 500
+            }}
+          >
+            {fileNotification.type === 'error' ? <AlertOctagon size={16} /> : <CheckCircle2 size={16} />}
+            <span>{fileNotification.message}</span>
+          </div>
+        )}
 
         {error && (
           <div className="login-error" style={{ marginBottom: '20px' }}>

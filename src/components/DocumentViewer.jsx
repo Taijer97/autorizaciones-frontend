@@ -10,10 +10,12 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
   const [selectedTitle, setSelectedTitle] = useState('');
   const [imageZoom, setImageZoom] = useState(1);
   const [activeAuth, setActiveAuth] = useState(null);
+  const [imageError, setImageError] = useState(false);
 
-  // Reset zoom when selected file changes
+  // Reset zoom and error when selected file changes
   useEffect(() => {
     setImageZoom(1);
+    setImageError(false);
   }, [selectedFile]);
 
   const containerRef = useRef(null);
@@ -516,6 +518,12 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
                       className="preview-iframe"
                       title={selectedTitle}
                     />
+                  ) : imageError ? (
+                    <div className="preview-placeholder">
+                      <AlertOctagon size={48} style={{ color: 'var(--color-danger)' }} />
+                      <h4 className="preview-placeholder-title" style={{ color: '#fca5a5' }}>Error al Cargar Imagen</h4>
+                      <p style={{ fontSize: '0.85rem' }}>No se pudo previsualizar la imagen. El formato podría no ser compatible con su navegador o el archivo no existe en el servidor.</p>
+                    </div>
                   ) : (
                     <div style={{ 
                       display: 'flex', 
@@ -529,6 +537,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
                         src={`/${selectedFile}?t=${Date.now()}`} 
                         className="preview-image"
                         alt={selectedTitle}
+                        onError={() => setImageError(true)}
                         style={{ 
                           maxHeight: `${756 * imageZoom}px`,
                           maxWidth: `${180 * imageZoom}%`,

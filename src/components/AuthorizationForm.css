@@ -421,3 +421,16 @@
   50% { opacity: 1; }
 }
 
+/* Hide camera option on desktop, show only on mobile */
+.camera-only-mobile {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .camera-only-mobile {
+    display: flex !important;
+    gap: 6px;
+    width: 100%;
+  }
+}
+
