@@ -68,6 +68,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   const [initialDni, setInitialDni] = useState('');
   const [loadingMessage, setLoadingMessage] = useState('Guardando cambios...');
   const [fileNotification, setFileNotification] = useState({ show: false, message: '', type: 'success' });
+  const [previewError, setPreviewError] = useState(false);
 
   const triggerFileNotification = (message, type = 'success') => {
     setFileNotification({ show: true, message, type });
@@ -124,6 +125,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
 
   // Populate data when editing
   useEffect(() => {
+    setPreviewError(false);
     if (authorization) {
       setDni(authorization.dni || '');
       setApellidosNombres(authorization.apellidos_nombres || '');
@@ -659,49 +661,46 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     );
   };
 
-  return (
-    <div 
-      className="modal-overlay"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => e.preventDefault()}
-    >
-      <div className="modal-content glass-panel">
-        <div className="modal-header">
-          <h2 className="modal-title">{isEdit ? 'Editar Autorización' : 'Nueva Autorización'}</h2>
-          <button className="modal-close-btn" onClick={onClose} disabled={loading}>
-            <X size={20} />
-          </button>
+  const hasPrincipalFile = isEdit && authorization && !!authorization.autorizacion_principal;
+
+  const renderFormContent = () => (
+    <>
+      <div className="modal-header">
+        <h2 className="modal-title">{isEdit ? 'Editar Autorización' : 'Nueva Autorización'}</h2>
+        <button className="modal-close-btn" onClick={onClose} disabled={loading}>
+          <X size={20} />
+        </button>
+      </div>
+
+      {fileNotification.show && (
+        <div 
+          style={{
+            background: fileNotification.type === 'error' ? 'var(--color-danger-bg)' : 'var(--color-success-bg)',
+            border: `1px solid ${fileNotification.type === 'error' ? 'var(--color-danger-border)' : 'var(--color-success-border)'}`,
+            color: fileNotification.type === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '16px',
+            animation: 'fadeInLoader 0.3s ease-out',
+            fontWeight: 500
+          }}
+        >
+          {fileNotification.type === 'error' ? <AlertOctagon size={16} /> : <CheckCircle2 size={16} />}
+          <span>{fileNotification.message}</span>
         </div>
+      )}
 
-        {fileNotification.show && (
-          <div 
-            style={{
-              background: fileNotification.type === 'error' ? 'var(--color-danger-bg)' : 'var(--color-success-bg)',
-              border: `1px solid ${fileNotification.type === 'error' ? 'var(--color-danger-border)' : 'var(--color-success-border)'}`,
-              color: fileNotification.type === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
-              padding: '10px 16px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '16px',
-              animation: 'fadeInLoader 0.3s ease-out',
-              fontWeight: 500
-            }}
-          >
-            {fileNotification.type === 'error' ? <AlertOctagon size={16} /> : <CheckCircle2 size={16} />}
-            <span>{fileNotification.message}</span>
-          </div>
-        )}
+      {error && (
+        <div className="login-error" style={{ marginBottom: '20px' }}>
+          <span>{error}</span>
+        </div>
+      )}
 
-        {error && (
-          <div className="login-error" style={{ marginBottom: '20px' }}>
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit}>
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">DNI</label>
@@ -892,6 +891,62 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
             </button>
           </div>
         </form>
+      </>
+  );
+
+  return (
+    <div 
+      className="modal-overlay"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => e.preventDefault()}
+    >
+      <div className={`modal-content glass-panel ${hasPrincipalFile ? 'modal-content-split' : ''}`}>
+        {hasPrincipalFile ? (
+          <div className="modal-split-container">
+            <div className="modal-split-form">
+              {renderFormContent()}
+            </div>
+            
+            <div className="modal-split-preview">
+              <div className="preview-header-split">
+                <span>Autorización Principal Registrada</span>
+              </div>
+              <div className="preview-body-split">
+                {previewError ? (
+                  <div className="preview-placeholder" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+                    <AlertOctagon size={40} style={{ color: 'var(--color-danger)' }} />
+                    <h4 style={{ color: '#fca5a5', fontSize: '0.9rem', margin: 0 }}>Archivo no disponible (404)</h4>
+                    <p style={{ fontSize: '0.75rem', margin: 0, lineHeight: 1.4, maxWidth: '280px' }}>
+                      El documento no está accesible en este entorno local o el archivo no existe físicamente en el disco.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {authorization.autorizacion_principal.toLowerCase().endsWith('.pdf') ? (
+                      <iframe 
+                        src={`/${authorization.autorizacion_principal}?t=${Date.now()}`} 
+                        className="preview-iframe-split"
+                        title="Autorización Principal"
+                        onError={() => setPreviewError(true)}
+                      />
+                    ) : (
+                      <div className="preview-image-container-split">
+                        <img 
+                          src={`/${authorization.autorizacion_principal}?t=${Date.now()}`} 
+                          className="preview-image-split"
+                          alt="Autorización Principal"
+                          onError={() => setPreviewError(true)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          renderFormContent()
+        )}
       </div>
 
       {/* Camera Capture Modal Overlay */}
