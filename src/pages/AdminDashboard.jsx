@@ -13,9 +13,12 @@ import './AdminDashboard.css';
 
 const AdminDashboard = () => {
   const { user, loading: authLoading } = useContext(AuthContext);
-  const { addDownload } = useContext(DownloadContext);
+  const { addDownload, downloads } = useContext(DownloadContext);
   const navigate = useNavigate();
   const { isLight, toggleTheme } = useTheme();
+
+  const isDownloadingZip = downloads.some(d => d.type === 'zip' && d.status === 'downloading');
+  const isDownloadingExcel = downloads.some(d => d.type === 'excel' && d.status === 'downloading');
 
   const [activeTab, setActiveTab] = useState('users'); // 'users', 'sedes', 'export'
   const [sedes, setSedes] = useState([]);
@@ -35,6 +38,7 @@ const AdminDashboard = () => {
 
   // Sede form state
   const [newSedeName, setNewSedeName] = useState('');
+  const [newSedeTag, setNewSedeTag] = useState('');
 
   // User form state
   const [editingUserId, setEditingUserId] = useState(null);
@@ -110,27 +114,46 @@ const AdminDashboard = () => {
     setTimeout(() => setSuccess(''), 4000);
   };
 
+  const [editingSedeId, setEditingSedeId] = useState(null);
+
+  const handleEditSedeClick = (sede) => {
+    setEditingSedeId(sede.id);
+    setNewSedeName(sede.name);
+    setNewSedeTag(sede.tag || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelSedeEdit = () => {
+    setEditingSedeId(null);
+    setNewSedeName('');
+    setNewSedeTag('');
+    setError('');
+  };
+
   // --- Sede Handlers ---
-  const handleCreateSede = async (e) => {
+  const handleSaveSede = async (e) => {
     e.preventDefault();
     if (!newSedeName.trim()) return;
 
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/sedes/', {
-        method: 'POST',
+      const url = editingSedeId ? `/api/sedes/${editingSedeId}` : '/api/sedes/';
+      const method = editingSedeId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user.access_token}`
         },
-        body: JSON.stringify({ name: newSedeName.trim() })
+        body: JSON.stringify({ name: newSedeName.trim(), tag: newSedeTag.trim() || null })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al crear la sede');
+      if (!res.ok) throw new Error(data.detail || 'Error al guardar la sede');
 
-      showSuccessMessage(`Sede "${data.name}" creada con éxito.`);
-      setNewSedeName('');
+      showSuccessMessage(editingSedeId ? `Sede "${data.name}" actualizada con éxito.` : `Sede "${data.name}" creada con éxito.`);
+      handleCancelSedeEdit();
       fetchData();
     } catch (err) {
       setError(err.message);
@@ -425,12 +448,12 @@ const AdminDashboard = () => {
         {activeTab === 'sedes' && user && user.role === 'superadmin' && (
           /* SEDES MANAGEMENT TAB */
           <div className="admin-content-grid">
-            {/* Create Sede Card */}
+            {/* Create/Edit Sede Card */}
             <div className="glass-panel admin-card">
               <h2 className="admin-card-title">
-                <Building2 size={18} /> Nueva Sede
+                {editingSedeId ? <><Edit2 size={18} /> Editar Sede</> : <><Building2 size={18} /> Nueva Sede</>}
               </h2>
-              <form onSubmit={handleCreateSede}>
+              <form onSubmit={handleSaveSede}>
                 <div className="form-group">
                   <label className="form-label">Nombre de Sede</label>
                   <input
@@ -443,10 +466,35 @@ const AdminDashboard = () => {
                     disabled={loading}
                   />
                 </div>
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }} disabled={loading}>
-                  <Plus size={16} />
-                  <span>Crear Sede</span>
-                </button>
+                <div className="form-group" style={{ marginTop: '10px' }}>
+                  <label className="form-label">TAG / Siglas de la Sede</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Ej. UGELAT"
+                    value={newSedeTag}
+                    onChange={(e) => setNewSedeTag(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                    style={{ textTransform: 'uppercase' }}
+                    disabled={loading}
+                    maxLength={15}
+                  />
+                </div>
+                
+                {editingSedeId ? (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
+                      <CheckCircle2 size={16} /> Guardar
+                    </button>
+                    <button type="button" className="btn btn-secondary" style={{ flex: 1 }} disabled={loading} onClick={handleCancelSedeEdit}>
+                      <X size={16} /> Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} disabled={loading}>
+                    <Plus size={16} />
+                    <span>Crear Sede</span>
+                  </button>
+                )}
               </form>
             </div>
 
@@ -461,17 +509,35 @@ const AdminDashboard = () => {
               ) : (
                 <div className="sedes-list">
                   {sedes.map((s) => (
-                    <div key={s.id} className="sede-item">
-                      <span className="sede-name">{s.name}</span>
-                      <button 
-                        className="btn btn-danger btn-icon" 
-                        style={{ width: '32px', height: '32px' }}
-                        onClick={() => handleDeleteSede(s.id, s.name)}
-                        title="Eliminar Sede"
-                        disabled={loading}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    <div key={s.id} className="sede-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span className="sede-name" style={{ fontWeight: '600' }}>{s.name}</span>
+                        {s.tag && (
+                          <span style={{ fontSize: '0.75rem', background: 'var(--accent-primary-20)', color: 'var(--accent-primary)', padding: '2px 6px', borderRadius: '4px', alignSelf: 'flex-start', marginTop: '4px', fontWeight: 'bold' }}>
+                            TAG: {s.tag}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          className="btn btn-secondary btn-icon" 
+                          style={{ width: '32px', height: '32px' }}
+                          onClick={() => handleEditSedeClick(s)}
+                          title="Editar Sede"
+                          disabled={loading}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button 
+                          className="btn btn-danger btn-icon" 
+                          style={{ width: '32px', height: '32px' }}
+                          onClick={() => handleDeleteSede(s.id, s.name)}
+                          title="Eliminar Sede"
+                          disabled={loading}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -899,12 +965,12 @@ const AdminDashboard = () => {
                   type="submit" 
                   className="btn btn-primary" 
                   style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600 }}
-                  disabled={exportLoading}
+                  disabled={exportLoading || isDownloadingZip}
                 >
-                  {exportLoading ? (
+                  {isDownloadingZip ? (
                     <>
                       <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>ZIP...</span>
+                      <span>Descargando ZIP...</span>
                     </>
                   ) : (
                     <>
@@ -917,7 +983,7 @@ const AdminDashboard = () => {
                   type="button" 
                   className="btn btn-secondary" 
                   style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600, background: 'var(--color-success-bg)', color: 'var(--color-success)', borderColor: 'var(--color-success-border)' }}
-                  disabled={exportLoading}
+                  disabled={exportLoading || isDownloadingExcel}
                   onClick={async () => {
                     setError('');
                     setSuccess('');
@@ -943,10 +1009,10 @@ const AdminDashboard = () => {
                     }
                   }}
                 >
-                  {exportLoading ? (
+                  {isDownloadingExcel ? (
                     <>
                       <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Cargando...</span>
+                      <span>Exportando...</span>
                     </>
                   ) : (
                     <>
