@@ -24,6 +24,7 @@ const Dashboard = () => {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [mainTab, setMainTab] = useState('vigentes'); // 'vigentes', 'inactivos'
   const [tableTab, setTableTab] = useState('all'); // 'all', 'expired', 'expiring'
   const [observationAlerts, setObservationAlerts] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -32,12 +33,13 @@ const Dashboard = () => {
   const canUpdateAuth = user ? (user.role === 'superadmin' || user.can_update) : false;
   const canDeleteAuth = user ? (user.role === 'superadmin' || user.can_delete) : false;
 
-  const getFilteredTableAuths = () => {
+  const getFilteredTableAuths = (baseAuthsParam) => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth() + 1;
 
-    return authorizations.filter(auth => {
+    return baseAuthsParam.filter(auth => {
+      // Sub-tabs filtering
       const diffMonths = (auth.termino_descuento_anio - currentYear) * 12 + (auth.termino_descuento_mes - currentMonth);
       if (tableTab === 'expired') {
         return diffMonths < 0;
@@ -204,7 +206,7 @@ const Dashboard = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSede, selectedStatus, searchDni, tableTab]);
+  }, [selectedSede, selectedStatus, searchDni, tableTab, mainTab]);
 
   // Run search when pressing enter or clicking search button
   const handleSearchSubmit = (e) => {
@@ -333,8 +335,16 @@ const Dashboard = () => {
     );
   }
 
+  // Pre-filter by mainTab
+  const baseAuths = authorizations.filter(auth => {
+    const isVigente = !auth.estado || auth.estado === 'VIGENTES';
+    if (mainTab === 'vigentes' && !isVigente) return false;
+    if (mainTab === 'inactivos' && isVigente) return false;
+    return true;
+  });
+
   // Calculate statistics
-  const totalRecords = authorizations.length;
+  const totalRecords = baseAuths.length;
   let completeRecords = 0;
   let missingPrincipal = 0;
   let missingOthers = 0;
@@ -345,7 +355,7 @@ const Dashboard = () => {
   const currentYearVal = currentDateObj.getFullYear();
   const currentMonthVal = currentDateObj.getMonth() + 1;
 
-  authorizations.forEach(auth => {
+  baseAuths.forEach(auth => {
     const hasP = !!auth.autorizacion_principal;
     const hasD = !!auth.autorizacion_duplicado;
     const hasR = !!auth.autorizacion_respaldo;
@@ -387,7 +397,7 @@ const Dashboard = () => {
   const formatMoney = (val) => parseFloat(val).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatMonth = (m) => String(m).padStart(2, '0');
 
-  const filteredAuths = getFilteredTableAuths();
+  const filteredAuths = getFilteredTableAuths(baseAuths);
   const totalPages = Math.ceil(filteredAuths.length / 25);
   const startIndex = (currentPage - 1) * 25;
   const paginatedAuths = filteredAuths.slice(startIndex, startIndex + 25);
@@ -544,35 +554,56 @@ const Dashboard = () => {
           <div className="table-header-row" style={{ flexWrap: 'wrap', gap: '10px' }}>
             {/* Izquierda: título + tabs */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-              <h2 className="table-title" style={{ margin: 0, whiteSpace: 'nowrap' }}>Autorizaciones CB</h2>
-              
-              {/* Tab Selector for Expiration sub-dashboards */}
-              <div className="admin-tabs" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                <button 
+              <div className="admin-tabs" style={{ borderBottom: 'none', paddingBottom: 0, gap: '4px' }}>
+                <button
                   type="button"
-                  className={`tab-btn ${tableTab === 'all' ? 'active' : ''}`}
-                  onClick={() => setTableTab('all')}
-                  style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                  className={`tab-btn ${mainTab === 'vigentes' ? 'active' : ''}`}
+                  onClick={() => { setMainTab('vigentes'); setTableTab('all'); }}
+                  style={{ padding: '8px 16px', fontSize: '0.95rem', fontWeight: 'bold' }}
                 >
-                  Todos ({totalRecords})
+                  <CheckCircle2 size={16} style={{ marginRight: '6px' }} />
+                  VIGENTES
                 </button>
-                <button 
+                <button
                   type="button"
-                  className={`tab-btn ${tableTab === 'expired' ? 'active' : ''}`}
-                  onClick={() => setTableTab('expired')}
-                  style={{ padding: '6px 12px', fontSize: '0.85rem', color: expiredCount > 0 ? 'var(--color-danger)' : undefined }}
+                  className={`tab-btn ${mainTab === 'inactivos' ? 'active' : ''}`}
+                  onClick={() => { setMainTab('inactivos'); setTableTab('all'); }}
+                  style={{ padding: '8px 16px', fontSize: '0.95rem', fontWeight: 'bold' }}
                 >
-                  Vencidos ({expiredCount})
-                </button>
-                <button 
-                  type="button"
-                  className={`tab-btn ${tableTab === 'expiring' ? 'active' : ''}`}
-                  onClick={() => setTableTab('expiring')}
-                  style={{ padding: '6px 12px', fontSize: '0.85rem', color: expiringCount > 0 ? 'var(--color-warning)' : undefined }}
-                >
-                  Por Vencer ({expiringCount})
+                  <AlertCircle size={16} style={{ marginRight: '6px' }} />
+                  INACTIVOS
                 </button>
               </div>
+              
+              {/* Tab Selector for Expiration sub-dashboards (Only for Vigentes) */}
+              {mainTab === 'vigentes' && (
+                <div className="admin-tabs" style={{ borderBottom: 'none', paddingBottom: 0, marginLeft: '10px' }}>
+                  <button 
+                    type="button"
+                    className={`tab-btn ${tableTab === 'all' ? 'active' : ''}`}
+                    onClick={() => setTableTab('all')}
+                    style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                  >
+                    Todos ({totalRecords})
+                  </button>
+                  <button 
+                    type="button"
+                    className={`tab-btn ${tableTab === 'expired' ? 'active' : ''}`}
+                    onClick={() => setTableTab('expired')}
+                    style={{ padding: '6px 12px', fontSize: '0.85rem', color: expiredCount > 0 ? 'var(--color-danger)' : undefined }}
+                  >
+                    Vencidos ({expiredCount})
+                  </button>
+                  <button 
+                    type="button"
+                    className={`tab-btn ${tableTab === 'expiring' ? 'active' : ''}`}
+                    onClick={() => setTableTab('expiring')}
+                    style={{ padding: '6px 12px', fontSize: '0.85rem', color: expiringCount > 0 ? 'var(--color-warning)' : undefined }}
+                  >
+                    Por Vencer ({expiringCount})
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Derecha: paginación compacta + botón Agregar */}
@@ -648,7 +679,12 @@ const Dashboard = () => {
               <div className="no-data-card">
                 <FileText size={48} style={{ color: 'var(--text-muted)' }} />
                 <h3>No se encontraron registros</h3>
-                <p>No hay autorizaciones registradas en la pestaña "{tableTab === 'expired' ? 'Vencidos' : tableTab === 'expiring' ? 'Por Vencer' : 'Todos'}" con los filtros activos.</p>
+                <p>
+                  {mainTab === 'inactivos' 
+                    ? 'No hay registros inactivos o cancelados con los filtros actuales.'
+                    : `No hay autorizaciones registradas en la pestaña "${tableTab === 'expired' ? 'Vencidos' : tableTab === 'expiring' ? 'Por Vencer' : 'Todos'}" con los filtros activos.`
+                  }
+                </p>
               </div>
             ) : (
               <table className="custom-table">
