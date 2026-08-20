@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { DownloadContext } from '../context/DownloadContext';
 import { 
   Building2, Users, ArrowLeft, Plus, Trash2, Edit2, 
   ShieldAlert, ShieldCheck, Key, FileText, CheckCircle2, 
@@ -12,6 +13,7 @@ import './AdminDashboard.css';
 
 const AdminDashboard = () => {
   const { user, loading: authLoading } = useContext(AuthContext);
+  const { addDownload } = useContext(DownloadContext);
   const navigate = useNavigate();
   const { isLight, toggleTheme } = useTheme();
 
@@ -25,8 +27,6 @@ const AdminDashboard = () => {
   const [exportStateFilter, setExportStateFilter] = useState('VIGENTES');
   const [exportSedeId, setExportSedeId] = useState(''); 
   const [exportLoading, setExportLoading] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
-  const [exportProgressVisible, setExportProgressVisible] = useState(false);
   
   // Loading & error states
   const [loading, setLoading] = useState(false);
@@ -810,8 +810,6 @@ const AdminDashboard = () => {
               setError('');
               setSuccess('');
               setExportLoading(true);
-              setExportProgress(0);
-              setExportProgressVisible(true);
               try {
                 const params = new URLSearchParams();
                 if (exportDocType) params.append('doc_type', exportDocType);
@@ -819,67 +817,18 @@ const AdminDashboard = () => {
                 if (exportStateFilter) params.append('state_filter', exportStateFilter);
                 if (exportSedeId) params.append('sede_id', exportSedeId);
 
-                const response = await fetch(`/api/authorizations/admin/export/zip?${params.toString()}`, {
-                  headers: { 'Authorization': `Bearer ${user.access_token}` }
+                addDownload({
+                  url: `/api/authorizations/admin/export/zip?${params.toString()}`,
+                  filename: `Export_CB_${new Date().toISOString().slice(0,10)}.zip`,
+                  token: user.access_token,
+                  type: 'zip'
                 });
-
-                if (!response.ok) {
-                  const data = await response.json();
-                  throw new Error(data.detail || 'Error al generar el archivo de exportación masiva.');
-                }
-
-                // Obtener el Content-Length expuesto por CORS
-                const contentLength = response.headers.get('Content-Length');
-                const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
                 
-                const reader = response.body.getReader();
-                let loadedBytes = 0;
-                const chunks = [];
-
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
-                  
-                  chunks.push(value);
-                  loadedBytes += value.length;
-
-                  if (totalBytes > 0) {
-                    const percent = Math.round((loadedBytes / totalBytes) * 100);
-                    setExportProgress(percent);
-                  } else {
-                    // Fallback si no está el header: simular progreso basado en megabytes (ej. hasta 99%)
-                    const simPercent = Math.min(99, Math.round(loadedBytes / (1024 * 1024 * 2))); // 2MB aprox
-                    setExportProgress(simPercent);
-                  }
-                }
-
-                const blob = new Blob(chunks, { type: 'application/x-zip-compressed' });
-                const downloadUrl = window.URL.createObjectURL(blob);
-                
-                const contentDisposition = response.headers.get('Content-Disposition');
-                let filename = `Export_CB_${new Date().toISOString().slice(0,10)}.zip`;
-                if (contentDisposition) {
-                  const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-                  if (filenameMatch && filenameMatch[1]) {
-                    filename = filenameMatch[1];
-                  }
-                }
-
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setSuccess('El expediente ZIP se ha generado y descargado con éxito.');
+                setSuccess('Descarga iniciada. Puedes ver el progreso en la esquina inferior derecha.');
               } catch (err) {
                 setError(err.message);
               } finally {
                 setExportLoading(false);
-                // Ocultar barra después de 3 segundos del fin de descarga
-                setTimeout(() => {
-                  setExportProgressVisible(false);
-                }, 3000);
               }
             }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               
@@ -979,25 +928,14 @@ const AdminDashboard = () => {
                       if (exportStateFilter) params.append('state_filter', exportStateFilter);
                       if (exportSedeId) params.append('sede_id', exportSedeId);
                       
-                      const response = await fetch(`/api/authorizations/admin/export/excel?${params.toString()}`, {
-                        headers: { 'Authorization': `Bearer ${user.access_token}` }
+                      addDownload({
+                        url: `/api/authorizations/admin/export/excel?${params.toString()}`,
+                        filename: `reporte_masivo_${new Date().getTime()}.csv`,
+                        token: user.access_token,
+                        type: 'excel'
                       });
                       
-                      if (!response.ok) {
-                        const data = await response.json();
-                        throw new Error(data.detail || 'Error al generar el archivo.');
-                      }
-                      
-                      const blob = await response.blob();
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `reporte_masivo_${new Date().getTime()}.csv`;
-                      document.body.appendChild(a);
-                      a.click();
-                      window.URL.revokeObjectURL(url);
-                      document.body.removeChild(a);
-                      setSuccess('Exportación a Excel completada.');
+                      setSuccess('Exportación a Excel iniciada. Puedes ver el progreso en la esquina.');
                     } catch (err) {
                       setError(err.message);
                     } finally {
@@ -1018,25 +956,6 @@ const AdminDashboard = () => {
                   )}
                 </button>
               </div>
-              
-              {exportProgressVisible && (
-                <div style={{ marginTop: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '6px', color: 'var(--text-secondary)' }}>
-                    <span>{exportProgress < 100 ? 'Descargando expediente masivo...' : 'Descarga completa'}</span>
-                    <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>{exportProgress}%</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div 
-                      style={{ 
-                        width: `${exportProgress}%`, 
-                        height: '100%', 
-                        background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)', 
-                        transition: 'width 0.2s ease-out' 
-                      }} 
-                    />
-                  </div>
-                </div>
-              )}
             </form>
           </div>
         )}
