@@ -151,6 +151,13 @@ const Dashboard = () => {
       if (searchDni) {
         const obs = sortedCached.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
         setObservationAlerts(obs.length > 0 ? obs : []);
+
+        if (sortedCached.length > 0) {
+          const firstResult = sortedCached[0];
+          const isVigente = !firstResult.estado || firstResult.estado === 'VIGENTES';
+          setMainTab(isVigente ? 'vigentes' : 'inactivos');
+          setTableTab('all');
+        }
       } else {
         setObservationAlerts([]);
       }
@@ -186,6 +193,14 @@ const Dashboard = () => {
       if (searchDni) {
         const obs = sortedData.filter(auth => auth.observaciones && auth.observaciones.trim() !== '');
         setObservationAlerts(obs.length > 0 ? obs : []);
+        
+        // Smart Tab Switching
+        if (sortedData.length > 0) {
+          const firstResult = sortedData[0];
+          const isVigente = !firstResult.estado || firstResult.estado === 'VIGENTES';
+          setMainTab(isVigente ? 'vigentes' : 'inactivos');
+          setTableTab('all');
+        }
       } else {
         setObservationAlerts([]);
       }
