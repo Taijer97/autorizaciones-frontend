@@ -6,13 +6,16 @@ import DocumentViewer from '../components/DocumentViewer';
 import { 
   LogOut, Plus, Search, FileText, AlertCircle, Filter, 
   Shield, ShieldAlert, FileCheck, CheckCircle2, Clock, Calendar, Trash2, Edit, 
-  Eye, RefreshCw, X, AlertTriangle, Building2, Bell, Loader2
+  Eye, RefreshCw, X, AlertTriangle, Building2, Bell, Loader2, Sun, Moon
 } from 'lucide-react';
+import useTheme from '../hooks/useTheme';
 import './Dashboard.css';
+
 
 const Dashboard = () => {
   const { user, logout, loading: authLoading } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { isLight, toggleTheme } = useTheme();
 
   const [authorizations, setAuthorizations] = useState([]);
   const [sedes, setSedes] = useState([]);
@@ -125,8 +128,8 @@ const Dashboard = () => {
   const sortData = (list) => {
     if (!list) return [];
     return [...list].sort((a, b) => {
-      const nameA = (a.apellidos_nombres || '').trim().toUpperCase();
-      const nameB = (b.apellidos_nombres || '').trim().toUpperCase();
+      const nameA = (`${a.apellido_pn || ''} ${a.apellido_mn || ''} ${a.nombres || ''}`).trim().toUpperCase();
+      const nameB = (`${b.apellido_pn || ''} ${b.apellido_mn || ''} ${b.nombres || ''}`).trim().toUpperCase();
       return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
     });
   };
@@ -425,6 +428,33 @@ const Dashboard = () => {
             </Link>
           )}
 
+          {/* Theme Toggle Button */}
+          <button
+            className="btn btn-secondary btn-icon"
+            onClick={toggleTheme}
+            title={isLight ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
+            style={{ marginRight: '8px', position: 'relative', overflow: 'hidden' }}
+          >
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.4s ease, opacity 0.3s ease',
+              transform: isLight ? 'rotate(0deg) scale(1)' : 'rotate(-30deg) scale(0.8)',
+              opacity: isLight ? 1 : 0,
+              position: isLight ? 'relative' : 'absolute'
+            }}>
+              <Sun size={16} style={{ color: '#f59e0b' }} />
+            </span>
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.4s ease, opacity 0.3s ease',
+              transform: isLight ? 'rotate(30deg) scale(0.8)' : 'rotate(0deg) scale(1)',
+              opacity: isLight ? 0 : 1,
+              position: isLight ? 'absolute' : 'relative'
+            }}>
+              <Moon size={16} style={{ color: '#a78bfa' }} />
+            </span>
+          </button>
+
           <button className="btn btn-secondary" onClick={logout} title="Cerrar sesión">
             <LogOut size={16} />
             <span className="hide-mobile">Salir</span>
@@ -435,58 +465,31 @@ const Dashboard = () => {
       {/* Main Container */}
       <main className="dashboard-main">
         
-        {/* Statistics Widgets - Compact */}
-        <section className="stats-grid-compact">
-          
-          <div className="glass-panel stat-card-mini">
-            <div className="stat-icon-mini" style={{ background: 'var(--color-info-bg)', color: 'var(--color-info)' }}>
-              <FileText size={16} />
-            </div>
-            <div className="stat-value-mini">{totalRecords}</div>
-            <div className="stat-label-mini">Total</div>
-          </div>
-
-          <div className="glass-panel stat-card-mini">
-            <div className="stat-icon-mini" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
-              <CheckCircle2 size={16} />
-            </div>
-            <div className="stat-value-mini">{completeRecords}</div>
-            <div className="stat-label-mini">Completos</div>
-          </div>
-
-          <div className="glass-panel stat-card-mini">
-            <div className="stat-icon-mini" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
-              <AlertTriangle size={16} />
-            </div>
-            <div className="stat-value-mini">{missingOthers}</div>
-            <div className="stat-label-mini">Incompletos</div>
-          </div>
-
-          <div className="glass-panel stat-card-mini" style={{ borderLeft: '2px solid var(--color-danger)' }}>
-            <div className="stat-icon-mini" style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
-              <AlertCircle size={16} />
-            </div>
-            <div className="stat-value-mini">{missingPrincipal}</div>
-            <div className="stat-label-mini">Falta Principal</div>
-          </div>
-
-          <div className="glass-panel stat-card-mini" style={{ borderLeft: '2px solid var(--color-danger)' }}>
-            <div className="stat-icon-mini" style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
-              <Clock size={16} />
-            </div>
-            <div className="stat-value-mini">{expiredCount}</div>
-            <div className="stat-label-mini">Vencidas</div>
-          </div>
-
-          <div className="glass-panel stat-card-mini" style={{ borderLeft: '2px solid var(--color-warning)' }}>
-            <div className="stat-icon-mini" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
-              <Calendar size={16} />
-            </div>
-            <div className="stat-value-mini">{expiringCount}</div>
-            <div className="stat-label-mini">Por Vencer</div>
-          </div>
-
-        </section>
+        {/* Statistics — barra horizontal compacta */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center',
+          background: 'var(--bg-glass)', border: '1px solid var(--border-color)',
+          borderRadius: 'var(--radius-sm)', padding: '8px 16px',
+          backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)'
+        }}>
+          {[
+            { icon: <FileText size={12} />,     value: totalRecords,      label: 'Total',           color: 'var(--color-info)' },
+            { icon: <CheckCircle2 size={12} />, value: completeRecords,   label: 'Completos',       color: 'var(--color-success)' },
+            { icon: <AlertTriangle size={12} />,value: missingOthers,     label: 'Incompletos',     color: 'var(--color-warning)' },
+            { icon: <AlertCircle size={12} />,  value: missingPrincipal,  label: 'Sin Principal',   color: 'var(--color-danger)' },
+            { icon: <Clock size={12} />,        value: expiredCount,      label: 'Vencidas',        color: 'var(--color-danger)' },
+            { icon: <Calendar size={12} />,     value: expiringCount,     label: 'Por Vencer',      color: 'var(--color-warning)' },
+          ].map((stat, i) => (
+            <React.Fragment key={stat.label}>
+              {i > 0 && <span style={{ color: 'var(--border-color)', fontSize: '1rem', userSelect: 'none', margin: '0 2px' }}>|</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '2px 6px' }}>
+                <span style={{ color: stat.color, display: 'flex', alignItems: 'center' }}>{stat.icon}</span>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{stat.value}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{stat.label}</span>
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
 
         {/* Search & Filters */}
         <section className="glass-panel filters-panel">
@@ -495,9 +498,9 @@ const Dashboard = () => {
             <input
               type="text"
               className="form-input search-input"
-              placeholder="Buscar por DNI (Presione Enter)..."
+              placeholder="Buscar por DNI, Apellidos o Nombres..."
               value={searchDni}
-              onChange={(e) => setSearchDni(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setSearchDni(e.target.value)}
             />
           </form>
 
@@ -538,9 +541,10 @@ const Dashboard = () => {
 
         {/* Data Table */}
         <section className="glass-panel table-panel">
-          <div className="table-header-row" style={{ flexWrap: 'wrap', gap: '15px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-              <h2 className="table-title" style={{ margin: 0 }}>Registros de Autorizaciones CB</h2>
+          <div className="table-header-row" style={{ flexWrap: 'wrap', gap: '10px' }}>
+            {/* Izquierda: título + tabs */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+              <h2 className="table-title" style={{ margin: 0, whiteSpace: 'nowrap' }}>Autorizaciones CB</h2>
               
               {/* Tab Selector for Expiration sub-dashboards */}
               <div className="admin-tabs" style={{ borderBottom: 'none', paddingBottom: 0 }}>
@@ -571,12 +575,72 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {canCreateAuth && (
-              <button className="btn btn-primary" onClick={openCreateModal}>
-                <Plus size={16} />
-                <span>Agregar Autorización</span>
-              </button>
-            )}
+            {/* Derecha: paginación compacta + botón Agregar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+              {/* Paginación inline */}
+              {totalPages > 1 && (() => {
+                const getPageRange = () => {
+                  const delta = 1;
+                  const range = [];
+                  const rangeWithDots = [];
+                  let l;
+                  for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                      range.push(i);
+                    }
+                  }
+                  for (let i of range) {
+                    if (l) {
+                      if (i - l === 2) rangeWithDots.push(l + 1);
+                      else if (i - l > 2) rangeWithDots.push('...');
+                    }
+                    rangeWithDots.push(i);
+                    l = i;
+                  }
+                  return rangeWithDots;
+                };
+
+                const btnBase = {
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: '30px', height: '30px', padding: '0 7px',
+                  borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.15s ease', border: 'none',
+                  userSelect: 'none',
+                };
+                const btnActive   = { ...btnBase, background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', color: '#fff', boxShadow: '0 2px 8px var(--accent-glow)' };
+                const btnNormal   = { ...btnBase, background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' };
+                const btnNav      = { ...btnNormal, padding: '0 10px' };
+                const btnDisabled = { ...btnNav, opacity: 0.3, cursor: 'not-allowed' };
+
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    {/* Info compacta */}
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: '4px', whiteSpace: 'nowrap' }}>
+                      {startIndex + 1}–{Math.min(startIndex + 25, filteredAuths.length)} / <b style={{ color: 'var(--accent-primary)' }}>{filteredAuths.length}</b>
+                    </span>
+
+                    <button type="button" style={currentPage === 1 ? btnDisabled : btnNav} onClick={() => setCurrentPage(1)} disabled={currentPage === 1} title="Primera">«</button>
+                    <button type="button" style={currentPage === 1 ? btnDisabled : btnNav} onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} title="Anterior">‹</button>
+
+                    {getPageRange().map((page, idx) =>
+                      page === '...'
+                        ? <span key={`d-${idx}`} style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', cursor: 'default', border: 'none', minWidth: '20px' }}>·</span>
+                        : <button key={page} type="button" style={currentPage === page ? btnActive : btnNormal} onClick={() => setCurrentPage(page)}>{page}</button>
+                    )}
+
+                    <button type="button" style={currentPage === totalPages ? btnDisabled : btnNav} onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} title="Siguiente">›</button>
+                    <button type="button" style={currentPage === totalPages ? btnDisabled : btnNav} onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} title="Última">»</button>
+                  </div>
+                );
+              })()}
+
+              {canCreateAuth && (
+                <button className="btn btn-primary" onClick={openCreateModal}>
+                  <Plus size={16} />
+                  <span>Agregar Autorización</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="table-wrapper">
@@ -590,9 +654,10 @@ const Dashboard = () => {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>DNI</th>
+                    <th>DNI / Cód. Mod.</th>
                     <th>Apellidos y Nombres</th>
                     <th>Sede</th>
+                    <th>F. Emisión</th>
                     <th>Inicio Dcto.</th>
                     <th>Cuotas</th>
                     <th>Término Dcto.</th>
@@ -606,12 +671,16 @@ const Dashboard = () => {
                   {loading ? (
                     Array.from({ length: 5 }).map((_, idx) => (
                       <tr key={idx}>
-                        <td><div className="skeleton-element" style={{ width: '80px', height: '16px' }}></div></td>
+                        <td>
+                          <div className="skeleton-element" style={{ width: '80px', height: '16px', marginBottom: '6px' }}></div>
+                          <div className="skeleton-element" style={{ width: '60px', height: '12px' }}></div>
+                        </td>
                         <td>
                           <div className="skeleton-element" style={{ width: '180px', height: '16px', marginBottom: '6px' }}></div>
                           <div className="skeleton-element" style={{ width: '120px', height: '12px' }}></div>
                         </td>
                         <td><div className="skeleton-element" style={{ width: '90px', height: '16px' }}></div></td>
+                        <td><div className="skeleton-element" style={{ width: '80px', height: '16px' }}></div></td>
                         <td><div className="skeleton-element" style={{ width: '60px', height: '16px' }}></div></td>
                         <td><div className="skeleton-element" style={{ width: '70px', height: '16px' }}></div></td>
                         <td><div className="skeleton-element" style={{ width: '70px', height: '16px' }}></div></td>
@@ -643,15 +712,25 @@ const Dashboard = () => {
                       
                       return (
                         <tr key={auth.id} className={getRowClass(auth)}>
-                          <td style={{ fontWeight: 700 }}>{auth.dni}</td>
+                          <td style={{ fontWeight: 700 }}>
+                            <div>{auth.dni}</div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '2px' }}>
+                              CM: {auth.cod_modular || '-'}
+                            </div>
+                          </td>
                           <td style={{ fontWeight: 500 }}>
-                            <div>{auth.apellidos_nombres}</div>
-                            {auth.observaciones && (
-                              <div style={{ fontSize: '0.75rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '4px', fontWeight: 600 }}>
-                                <AlertTriangle size={12} />
-                                <span>Obs: {auth.observaciones}</span>
-                              </div>
-                            )}
+                            <div>{`${auth.apellido_pn} ${auth.apellido_mn} ${auth.nombres}`}</div>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                              <span className={`badge ${auth.estado === 'CANCELADOS' ? 'badge-danger' : auth.estado === 'NO TRABAJAN' ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
+                                {auth.estado || 'VIGENTES'}
+                              </span>
+                              {auth.observaciones && (
+                                <div style={{ fontSize: '0.75rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                                  <AlertTriangle size={12} />
+                                  <span>Obs: {auth.observaciones}</span>
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -659,6 +738,7 @@ const Dashboard = () => {
                               {auth.sede}
                             </span>
                           </td>
+                          <td style={{ fontSize: '0.85rem' }}>{auth.fecha_emision ? new Date(auth.fecha_emision).toLocaleDateString('es-PE') : '-'}</td>
                           <td>{formatMonth(auth.inicio_descuento_mes)}/{auth.inicio_descuento_anio}</td>
                           <td>
                             <span className="badge badge-info" style={{ fontWeight: 'normal' }}>
@@ -674,9 +754,9 @@ const Dashboard = () => {
                               const diffMonths = (auth.termino_descuento_anio - currentYear) * 12 + (auth.termino_descuento_mes - currentMonth);
                               
                               if (diffMonths < 0) {
-                                return <span style={{ fontSize: '0.65rem', color: '#fca5a5', background: 'rgba(239, 68, 68, 0.25)', border: '1px solid rgba(239, 68, 68, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>VENCIDA</span>;
+                                return <span style={{ fontSize: '0.65rem', color: 'var(--color-danger)', background: 'var(--color-danger-bg)', border: '1px solid var(--color-danger-border)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>VENCIDA</span>;
                               } else if (diffMonths <= 1) {
-                                return <span style={{ fontSize: '0.65rem', color: '#fde047', background: 'rgba(245, 158, 11, 0.25)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>1 MES A VENCER</span>;
+                                return <span style={{ fontSize: '0.65rem', color: 'var(--color-warning)', background: 'var(--color-warning-bg)', border: '1px solid var(--color-warning-border)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>1 MES A VENCER</span>;
                               }
                               return null;
                             })()}
@@ -764,66 +844,6 @@ const Dashboard = () => {
               </table>
             )}
           </div>
-
-          {/* Pagination Controls */}
-          {filteredAuths.length > 0 && !loading && (
-            <div className="pagination-controls" style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: '16px',
-              paddingTop: '16px',
-              borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                Mostrando <b>{startIndex + 1}</b> a <b>{Math.min(startIndex + 25, filteredAuths.length)}</b> de <b>{filteredAuths.length}</b> registros
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                >
-                  Anterior
-                </button>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {Array.from({ length: totalPages }).map((_, idx) => {
-                    const pageNum = idx + 1;
-                    return (
-                      <button
-                        key={pageNum}
-                        type="button"
-                        className={`btn ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setCurrentPage(pageNum)}
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          padding: 0,
-                          fontSize: '0.8rem',
-                          borderRadius: '4px'
-                        }}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages || totalPages === 0}
-                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
-          )}
         </section>
 
       </main>
@@ -867,7 +887,7 @@ const Dashboard = () => {
                   <div key={auth.id} className="glass-panel" style={{ padding: '14px', background: 'rgba(245, 158, 11, 0.05)', borderColor: 'rgba(245, 158, 11, 0.2)', borderRadius: '8px', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>
-                        Sede: {auth.sede} | {auth.apellidos_nombres}
+                        Sede: {auth.sede} | {`${auth.apellido_pn} ${auth.apellido_mn} ${auth.nombres}`}
                       </span>
                     </div>
                     <div style={{ fontSize: '0.95rem', color: '#fef08a', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', borderLeft: '3px solid #fbbf24', fontStyle: 'italic', marginBottom: '12px' }}>

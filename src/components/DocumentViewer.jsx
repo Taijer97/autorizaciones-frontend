@@ -113,7 +113,9 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
 
   const {
     dni,
-    apellidos_nombres,
+    apellido_pn,
+    apellido_mn,
+    nombres,
     sede,
     inicio_descuento_mes,
     inicio_descuento_anio,
@@ -247,7 +249,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
               <div className="viewer-details-list">
                 <div className="viewer-detail-item">
                   <span className="viewer-detail-label">Apellidos y Nombres:</span>
-                  <span className="viewer-detail-value">{apellidos_nombres}</span>
+                  <span className="viewer-detail-value">{`${apellido_pn} ${apellido_mn} ${nombres}`}</span>
                 </div>
                 <div className="viewer-detail-item">
                   <span className="viewer-detail-label">DNI:</span>

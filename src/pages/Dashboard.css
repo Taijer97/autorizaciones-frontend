@@ -1,8 +1,9 @@
 .dashboard-layout {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
+  overflow: hidden; /* Bloquea scroll global de la página */
 }
 
 /* Header styling */
@@ -15,8 +16,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
-  top: 0;
+  flex-shrink: 0; /* El header nunca se encoge */
+  position: relative;
   z-index: 50;
 }
 
@@ -87,19 +88,19 @@
 /* Dashboard Main Content */
 .dashboard-main {
   flex: 1;
-  padding: 24px 30px;
-  max-width: 1920px;
-  width: 96%;
-  margin: 0 auto;
+  padding: 16px 24px;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+  overflow: hidden; /* No scroll en el main, solo en la tabla */
+  min-height: 0;    /* Necesario para que flex-children se encojan */
 }
 
 @media (max-width: 768px) {
   .dashboard-main {
     padding: 20px;
-    gap: 20px;
+    gap: 16px;
   }
 }
 
@@ -239,6 +240,10 @@
 .table-panel {
   overflow: hidden;
   padding: 0;
+  flex: 1;           /* Ocupa todo el espacio restante disponible */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;     /* Necesario para que el scroll funcione en flex */
 }
 
 .table-header-row {
@@ -247,6 +252,7 @@
   align-items: center;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;    /* Nunca se encoge */
 }
 
 .table-title {
@@ -256,7 +262,10 @@
 
 .table-wrapper {
   overflow-x: auto;
+  overflow-y: auto;  /* Scroll vertical solo en la tabla */
   width: 100%;
+  flex: 1;           /* Llena el resto del espacio del table-panel */
+  min-height: 0;
 }
 
 .custom-table {
@@ -266,8 +275,16 @@
   font-size: 0.92rem;
 }
 
+/* Encabezados de la tabla: fijos al hacer scroll */
+.custom-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+
 .custom-table th {
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
   font-weight: 600;
   text-transform: uppercase;
@@ -275,6 +292,7 @@
   letter-spacing: 0.05em;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .custom-table td {

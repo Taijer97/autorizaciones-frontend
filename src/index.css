@@ -12,6 +12,8 @@
   --border-color: rgba(255, 255, 255, 0.08);
   --border-color-glow: rgba(21, 144, 214, 0.25);
   
+  --modal-overlay-bg: rgba(4, 5, 8, 0.85);
+
   --text-primary: #f3f4f6;
   --text-secondary: #a0aec0;
   --text-muted: #718096;
@@ -51,6 +53,52 @@
   --glass-blur: blur(16px) saturate(180%);
 }
 
+/* ============================
+   LIGHT MODE THEME
+   ============================ */
+body.light-mode {
+  --bg-primary: #f0f4f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e2e8f0;
+  --bg-glass: rgba(255, 255, 255, 0.82);
+  --bg-glass-hover: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(0, 0, 0, 0.09);
+  --border-color-glow: rgba(21, 144, 214, 0.3);
+
+  --modal-overlay-bg: rgba(255, 255, 255, 0.8);
+
+  --text-primary: #1a202c;
+  --text-secondary: #4a5568;
+  --text-muted: #a0aec0;
+
+  --accent-primary: #1590d6;
+  --accent-primary-hover: #107bb7;
+  --accent-secondary: #38bdf8;
+  --accent-glow: rgba(21, 144, 214, 0.2);
+
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.08);
+  --color-success-border: rgba(5, 150, 105, 0.2);
+
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.08);
+  --color-warning-border: rgba(217, 119, 6, 0.2);
+
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.08);
+  --color-danger-border: rgba(220, 38, 38, 0.2);
+
+  --color-info: #2563eb;
+  --color-info-bg: rgba(37, 99, 235, 0.08);
+  --color-info-border: rgba(37, 99, 235, 0.2);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.18);
+
+  --glass-blur: blur(16px) saturate(160%);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -65,6 +113,23 @@ body {
   color: var(--text-primary);
   overflow-x: hidden;
   min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light mode: input backgrounds */
+body.light-mode .form-input {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-primary);
+}
+body.light-mode .form-input:focus {
+  background: rgba(0, 0, 0, 0.07);
+}
+body.light-mode .btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+body.light-mode .toast {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text-primary);
 }
 
 /* Custom Scrollbars */

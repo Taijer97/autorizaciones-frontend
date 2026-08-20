@@ -4,13 +4,16 @@ import { AuthContext } from '../context/AuthContext';
 import { 
   Building2, Users, ArrowLeft, Plus, Trash2, Edit2, 
   ShieldAlert, ShieldCheck, Key, FileText, CheckCircle2, 
-  AlertTriangle, Loader2, X, RefreshCw, Download
+  AlertTriangle, Loader2, X, RefreshCw, Download, Sun, Moon
 } from 'lucide-react';
+import useTheme from '../hooks/useTheme';
 import './AdminDashboard.css';
+
 
 const AdminDashboard = () => {
   const { user, loading: authLoading } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { isLight, toggleTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useState('users'); // 'users', 'sedes', 'export'
   const [sedes, setSedes] = useState([]);
@@ -19,8 +22,11 @@ const AdminDashboard = () => {
   // Export states
   const [exportDocType, setExportDocType] = useState('all'); 
   const [exportStatusFilter, setExportStatusFilter] = useState('all'); 
+  const [exportStateFilter, setExportStateFilter] = useState('VIGENTES');
   const [exportSedeId, setExportSedeId] = useState(''); 
   const [exportLoading, setExportLoading] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportProgressVisible, setExportProgressVisible] = useState(false);
   
   // Loading & error states
   const [loading, setLoading] = useState(false);
@@ -328,7 +334,34 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Theme Toggle Button */}
+          <button
+            className="btn btn-secondary btn-icon"
+            onClick={toggleTheme}
+            title={isLight ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
+            style={{ position: 'relative', overflow: 'hidden' }}
+          >
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.4s ease, opacity 0.3s ease',
+              transform: isLight ? 'rotate(0deg) scale(1)' : 'rotate(-30deg) scale(0.8)',
+              opacity: isLight ? 1 : 0,
+              position: isLight ? 'relative' : 'absolute'
+            }}>
+              <Sun size={16} style={{ color: '#f59e0b' }} />
+            </span>
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.4s ease, opacity 0.3s ease',
+              transform: isLight ? 'rotate(30deg) scale(0.8)' : 'rotate(0deg) scale(1)',
+              opacity: isLight ? 0 : 1,
+              position: isLight ? 'absolute' : 'relative'
+            }}>
+              <Moon size={16} style={{ color: '#a78bfa' }} />
+            </span>
+          </button>
+
           <Link to="/dashboard" className="btn btn-secondary">
             <ArrowLeft size={16} />
             <span>Volver al Dashboard</span>
@@ -777,10 +810,13 @@ const AdminDashboard = () => {
               setError('');
               setSuccess('');
               setExportLoading(true);
+              setExportProgress(0);
+              setExportProgressVisible(true);
               try {
                 const params = new URLSearchParams();
                 if (exportDocType) params.append('doc_type', exportDocType);
                 if (exportStatusFilter) params.append('status_filter', exportStatusFilter);
+                if (exportStateFilter) params.append('state_filter', exportStateFilter);
                 if (exportSedeId) params.append('sede_id', exportSedeId);
 
                 const response = await fetch(`/api/authorizations/admin/export/zip?${params.toString()}`, {
@@ -792,7 +828,32 @@ const AdminDashboard = () => {
                   throw new Error(data.detail || 'Error al generar el archivo de exportación masiva.');
                 }
 
-                const blob = await response.blob();
+                // Obtener el Content-Length expuesto por CORS
+                const contentLength = response.headers.get('Content-Length');
+                const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+                
+                const reader = response.body.getReader();
+                let loadedBytes = 0;
+                const chunks = [];
+
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  
+                  chunks.push(value);
+                  loadedBytes += value.length;
+
+                  if (totalBytes > 0) {
+                    const percent = Math.round((loadedBytes / totalBytes) * 100);
+                    setExportProgress(percent);
+                  } else {
+                    // Fallback si no está el header: simular progreso basado en megabytes (ej. hasta 99%)
+                    const simPercent = Math.min(99, Math.round(loadedBytes / (1024 * 1024 * 2))); // 2MB aprox
+                    setExportProgress(simPercent);
+                  }
+                }
+
+                const blob = new Blob(chunks, { type: 'application/x-zip-compressed' });
                 const downloadUrl = window.URL.createObjectURL(blob);
                 
                 const contentDisposition = response.headers.get('Content-Disposition');
@@ -815,6 +876,10 @@ const AdminDashboard = () => {
                 setError(err.message);
               } finally {
                 setExportLoading(false);
+                // Ocultar barra después de 3 segundos del fin de descarga
+                setTimeout(() => {
+                  setExportProgressVisible(false);
+                }, 3000);
               }
             }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               
@@ -865,24 +930,113 @@ const AdminDashboard = () => {
                 </select>
               </div>
 
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
-                style={{ width: '100%', padding: '12px', fontSize: '0.98rem', fontWeight: 600, marginTop: '8px' }}
-                disabled={exportLoading}
-              >
-                {exportLoading ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                    <span>Empaquetando Archivos ZIP...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download size={16} />
-                    <span>Descargar Archivo ZIP</span>
-                  </>
-                )}
-              </button>
+              <div className="form-group">
+                <label className="form-label">Estado del Trabajador</label>
+                <select 
+                  className="form-input"
+                  value={exportStateFilter}
+                  onChange={(e) => setExportStateFilter(e.target.value)}
+                  disabled={exportLoading}
+                >
+                  <option value="all">Todos</option>
+                  <option value="VIGENTES">VIGENTES</option>
+                  <option value="CANCELADOS">CANCELADOS</option>
+                  <option value="NO TRABAJAN">NO TRABAJAN</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600 }}
+                  disabled={exportLoading}
+                >
+                  {exportLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>ZIP...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} />
+                      <span>Descargar ZIP</span>
+                    </>
+                  )}
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600, background: 'var(--color-success-bg)', color: 'var(--color-success)', borderColor: 'var(--color-success-border)' }}
+                  disabled={exportLoading}
+                  onClick={async () => {
+                    setError('');
+                    setSuccess('');
+                    setExportLoading(true);
+                    try {
+                      const params = new URLSearchParams();
+                      if (exportStatusFilter) params.append('status_filter', exportStatusFilter);
+                      if (exportStateFilter) params.append('state_filter', exportStateFilter);
+                      if (exportSedeId) params.append('sede_id', exportSedeId);
+                      
+                      const response = await fetch(`/api/authorizations/admin/export/excel?${params.toString()}`, {
+                        headers: { 'Authorization': `Bearer ${user.access_token}` }
+                      });
+                      
+                      if (!response.ok) {
+                        const data = await response.json();
+                        throw new Error(data.detail || 'Error al generar el archivo.');
+                      }
+                      
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `reporte_masivo_${new Date().getTime()}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      document.body.removeChild(a);
+                      setSuccess('Exportación a Excel completada.');
+                    } catch (err) {
+                      setError(err.message);
+                    } finally {
+                      setExportLoading(false);
+                    }
+                  }}
+                >
+                  {exportLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Cargando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} />
+                      <span>Descargar EXCEL</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {exportProgressVisible && (
+                <div style={{ marginTop: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                    <span>{exportProgress < 100 ? 'Descargando expediente masivo...' : 'Descarga completa'}</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>{exportProgress}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div 
+                      style={{ 
+                        width: `${exportProgress}%`, 
+                        height: '100%', 
+                        background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)', 
+                        transition: 'width 0.2s ease-out' 
+                      }} 
+                    />
+                  </div>
+                </div>
+              )}
             </form>
           </div>
         )}

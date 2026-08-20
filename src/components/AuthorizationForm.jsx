@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, FileText, Loader2, Calendar, DollarSign, Camera, Trash2, Image as ImageIcon, CheckCircle2, AlertOctagon } from 'lucide-react';
+import { X, Upload, FileText, Loader2, Calendar, DollarSign, Camera, Trash2, Image as ImageIcon, CheckCircle2, AlertOctagon, Search } from 'lucide-react';
 import './AuthorizationForm.css';
 
 const MESES = [
@@ -23,7 +23,9 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   const isEdit = !!authorization;
   
   const [dni, setDni] = useState('');
-  const [apellidosNombres, setApellidosNombres] = useState('');
+  const [apellidoPn, setApellidoPn] = useState('');
+  const [apellidoMn, setApellidoMn] = useState('');
+  const [nombres, setNombres] = useState('');
   const [sedeId, setSedeId] = useState('');
   const [sedes, setSedes] = useState([]);
   const [inicioMes, setInicioMes] = useState(1);
@@ -31,6 +33,9 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
   const [numCuotas, setNumCuotas] = useState(12);
   const [montoMensual, setMontoMensual] = useState('');
   const [observaciones, setObservaciones] = useState('');
+  const [codModular, setCodModular] = useState('');
+  const [fechaEmision, setFechaEmision] = useState('');
+  const [estado, setEstado] = useState('VIGENTES');
   
   // File attachments
   const [filePrincipal, setFilePrincipal] = useState(null);
@@ -128,13 +133,18 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     setPreviewError(false);
     if (authorization) {
       setDni(authorization.dni || '');
-      setApellidosNombres(authorization.apellidos_nombres || '');
+      setApellidoPn(authorization.apellido_pn || '');
+      setApellidoMn(authorization.apellido_mn || '');
+      setNombres(authorization.nombres || '');
       setSedeId(authorization.sede_id || '');
       setInicioMes(authorization.inicio_descuento_mes || 1);
       setInicioAnio(authorization.inicio_descuento_anio || new Date().getFullYear());
       setNumCuotas(authorization.num_cuotas || 12);
       setMontoMensual(authorization.monto_mensual || '');
       setObservaciones(authorization.observaciones || '');
+      setCodModular(authorization.cod_modular || '');
+      setFechaEmision(authorization.fecha_emision ? authorization.fecha_emision.split('T')[0] : '');
+      setEstado(authorization.estado || 'VIGENTES');
       
       // Reset files
       setFilePrincipal(null);
@@ -154,13 +164,18 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     } else {
       // Clear data for new auth
       setDni('');
-      setApellidosNombres('');
+      setApellidoPn('');
+      setApellidoMn('');
+      setNombres('');
       setSedeId('');
       setInicioMes(new Date().getMonth() + 1);
       setInicioAnio(new Date().getFullYear());
       setNumCuotas(12);
       setMontoMensual('');
       setObservaciones('');
+      setCodModular('');
+      setFechaEmision(new Date().toISOString().split('T')[0]);
+      setEstado('VIGENTES');
       
       setFilePrincipal(null);
       setFileDuplicado(null);
@@ -172,39 +187,40 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     }
   }, [authorization, isOpen]);
 
+  const fetchReniecData = async (force = false) => {
+    if (dni.length === 8 && (force || dni !== initialDni)) {
+      setReniecLoading(true);
+      setError('');
+      try {
+        const response = await fetch(`/api/authorizations/reniec/${dni}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) {
+          throw new Error('No se pudo consultar el DNI en RENIEC.');
+        }
+        const data = await response.json();
+        if (data && data.datos) {
+          const { nombres, apellido_paterno, apellido_materno } = data.datos;
+          setApellidoPn(apellido_paterno || '');
+          setApellidoMn(apellido_materno || '');
+          setNombres(nombres || '');
+        } else {
+          setError('No se encontraron datos para el DNI ingresado.');
+        }
+      } catch (err) {
+        console.error('Error al consultar RENIEC:', err);
+        setError('Error al consultar DNI en RENIEC. Ingrese el nombre manualmente.');
+      } finally {
+        setReniecLoading(false);
+      }
+    }
+  };
+
   // Trigger RENIEC query automatically when DNI is 8 digits and has changed
   useEffect(() => {
-    const fetchReniecData = async () => {
-      if (dni.length === 8 && dni !== initialDni) {
-        setReniecLoading(true);
-        setError('');
-        try {
-          const response = await fetch(`/api/authorizations/reniec/${dni}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (!response.ok) {
-            throw new Error('No se pudo consultar el DNI en RENIEC.');
-          }
-          const data = await response.json();
-          if (data && data.datos) {
-            const { nombres, apellido_paterno, apellido_materno } = data.datos;
-            const full_name = `${apellido_paterno} ${apellido_materno} ${nombres}`.trim().toUpperCase();
-            setApellidosNombres(full_name);
-          } else {
-            setError('No se encontraron datos para el DNI ingresado.');
-          }
-        } catch (err) {
-          console.error('Error al consultar RENIEC:', err);
-          setError('Error al consultar DNI en RENIEC. Ingrese el nombre manualmente.');
-        } finally {
-          setReniecLoading(false);
-        }
-      }
-    };
-
-    fetchReniecData();
+    fetchReniecData(false);
   }, [dni, initialDni, token]);
 
   // Fetch sedes list
@@ -280,7 +296,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     e.preventDefault();
     setError('');
     
-    if (!dni || !apellidosNombres || !sedeId || !inicioMes || !inicioAnio || !numCuotas || !montoMensual) {
+    if (!dni || !apellidoPn || !nombres || !sedeId || !inicioMes || !inicioAnio || !numCuotas || !montoMensual) {
       setError('Por favor completa todos los campos del formulario.');
       return;
     }
@@ -290,13 +306,20 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
 
     const formData = new FormData();
     formData.append('dni', dni);
-    formData.append('apellidos_nombres', apellidosNombres);
+    formData.append('apellido_pn', apellidoPn);
+    formData.append('apellido_mn', apellidoMn);
+    formData.append('nombres', nombres);
     formData.append('sede_id', parseInt(sedeId));
     formData.append('inicio_descuento_mes', parseInt(inicioMes));
     formData.append('inicio_descuento_anio', parseInt(inicioAnio));
     formData.append('num_cuotas', parseInt(numCuotas));
     formData.append('monto_mensual', parseFloat(montoMensual));
     formData.append('observaciones', observaciones || '');
+    formData.append('cod_modular', codModular || '');
+    if (fechaEmision) {
+      formData.append('fecha_emision', new Date(fechaEmision).toISOString());
+    }
+    formData.append('estado', estado);
 
     // Files
     if (filePrincipal) formData.append('file_principal', filePrincipal);
@@ -485,50 +508,49 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
     
     return (
       <div 
-        className="file-upload-card"
+        className={`file-upload-card-custom ${fileState ? 'has-file' : ''}`}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDropFile(e, docKey)}
-        style={{
-          border: fileState ? '1px dashed var(--accent-primary)' : '1px dashed rgba(255,255,255,0.15)',
-          padding: '12px',
-          borderRadius: '8px',
-          background: 'rgba(255, 255, 255, 0.02)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          transition: 'all 0.2s ease',
-          position: 'relative'
-        }}
       >
-        <span className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: isRequired && !fileState && !hasExistingFile ? '#f87171' : 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', margin: 0 }}>
+        <span className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: isRequired && !fileState && !hasExistingFile ? 'var(--color-danger)' : 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', margin: 0 }}>
           {label} {isRequired && '*'}
         </span>
 
+        <input
+          id={`file-input-${docKey}`}
+          type="file"
+          style={{ display: 'none' }}
+          accept=".pdf,image/*"
+          onClick={(e) => e.stopPropagation()}
+          onChange={async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const errorMsg = validateFile(file);
+              if (errorMsg) {
+                triggerFileNotification(errorMsg, 'error');
+                return;
+              }
+              const compressed = await compressImage(file);
+              setFileState(compressed);
+              setDelState(false); // Make sure we override deletion marker if we replace
+              triggerFileNotification(`Archivo "${file.name}" cargado correctamente`, 'success');
+            }
+          }}
+        />
+
         {hasExistingFile && !delState ? (
-          <div className="existing-file-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
-            <span className="existing-file-name" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }} title={getFileName(authorization[docKey === 'principal' ? 'autorizacion_principal' : docKey === 'duplicado' ? 'autorizacion_duplicado' : docKey === 'respaldo' ? 'autorizacion_respaldo' : docKey === 'declaracion' ? 'declaracion_jurada' : docKey === 'dni' ? 'copia_dni' : 'evidencias'])}>
+          <div className="existing-file-box">
+            <span className="existing-file-name" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%', color: 'var(--accent-primary)' }} title={getFileName(authorization[docKey === 'principal' ? 'autorizacion_principal' : docKey === 'duplicado' ? 'autorizacion_duplicado' : docKey === 'respaldo' ? 'autorizacion_respaldo' : docKey === 'declaracion' ? 'declaracion_jurada' : docKey === 'dni' ? 'copia_dni' : 'evidencias'])}>
               <FileText size={14} style={{ color: 'var(--accent-primary)' }} /> 
               {docKey === 'declaracion' ? 'Declaracion' : docKey === 'dni' ? 'Copia_DNI' : docKey.charAt(0).toUpperCase() + docKey.slice(1)}.pdf
             </span>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button
                 type="button"
+                className="btn-mini-delete"
                 onClick={() => {
                   setDelState(true);
                   setFileState(null);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  fontSize: '0.7rem',
-                  color: '#fca5a5',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
                 }}
                 title="Eliminar archivo"
               >
@@ -536,22 +558,10 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
               </button>
               <button
                 type="button"
+                className="btn-mini-replace"
                 onClick={() => {
                   const input = document.getElementById(`file-input-${docKey}`);
                   if (input) input.click();
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'rgba(99, 102, 241, 0.15)',
-                  border: '1px solid rgba(99, 102, 241, 0.3)',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  fontSize: '0.7rem',
-                  color: '#a5b4fc',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
                 }}
                 title="Reemplazar archivo"
               >
@@ -563,69 +573,19 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
             {/* Drop / Drag Zone */}
             <div 
-              className="dropzone-area"
-              style={{
-                border: '1px dashed rgba(255,255,255,0.08)',
-                borderRadius: '6px',
-                padding: '10px 8px',
-                textAlign: 'center',
-                background: 'rgba(0,0,0,0.15)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                cursor: 'pointer'
-              }}
+              className="dropzone-area-custom"
               onClick={() => document.getElementById(`file-input-${docKey}`).click()}
             >
               <Upload size={16} style={{ color: 'var(--text-muted)' }} />
               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Cargar o arrastrar archivo</span>
-              <input
-                id={`file-input-${docKey}`}
-                type="file"
-                style={{ display: 'none' }}
-                accept=".pdf,image/*"
-                onClick={(e) => e.stopPropagation()}
-                onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    const errorMsg = validateFile(file);
-                    if (errorMsg) {
-                      triggerFileNotification(errorMsg, 'error');
-                      return;
-                    }
-                    const compressed = await compressImage(file);
-                    setFileState(compressed);
-                    setDelState(false);
-                    triggerFileNotification(`Archivo "${file.name}" cargado correctamente`, 'success');
-                  }
-                }}
-              />
             </div>
 
             {/* Actions: Camera */}
             <div className="camera-only-mobile">
               <button
                 type="button"
+                className="btn-mini-camera"
                 onClick={() => openCameraModal(docKey)}
-                style={{
-                  flexGrow: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '4px',
-                  padding: '6px',
-                  fontSize: '0.7rem',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }}
-                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
               >
                 <Camera size={12} style={{ color: 'var(--accent-primary)' }} />
                 Tomar Foto
@@ -634,22 +594,14 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
 
             {/* File state preview / clean */}
             {fileState && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 6px', borderRadius: '4px' }}>
-                <span style={{ fontSize: '0.68rem', color: '#34d399', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div className="file-preview-box">
+                <span className="file-preview-text">
                   <ImageIcon size={12} /> {fileState.name}
                 </span>
                 <button
                   type="button"
+                  className="file-preview-delete"
                   onClick={() => setFileState(null)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#f87171',
-                    cursor: 'pointer',
-                    padding: '2px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -704,46 +656,121 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">DNI</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  maxLength={8}
-                  pattern="\d{8}"
-                  placeholder="Ingrese 8 dígitos"
-                  value={dni}
-                  onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))}
-                  disabled={loading || reniecLoading}
-                  style={{ width: '100%', paddingRight: reniecLoading ? '36px' : '12px' }}
-                />
-                {reniecLoading && (
-                  <Loader2 
-                    size={16} 
-                    className="animate-spin" 
-                    style={{ 
-                      position: 'absolute', 
-                      right: '12px', 
-                      top: '50%', 
-                      transform: 'translateY(-50%)',
-                      color: 'var(--accent-primary)',
-                      animation: 'spin 1s linear infinite'
-                    }} 
+              <div style={{ position: 'relative', display: 'flex', gap: '8px' }}>
+                <div style={{ position: 'relative', flexGrow: 1 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    maxLength={8}
+                    pattern="\d{8}"
+                    placeholder="Ingrese 8 dígitos"
+                    value={dni}
+                    onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))}
+                    disabled={loading || reniecLoading}
+                    style={{ width: '100%', paddingRight: reniecLoading ? '36px' : '12px' }}
                   />
-                )}
+                  {reniecLoading && (
+                    <Loader2 
+                      size={16} 
+                      className="animate-spin" 
+                      style={{ 
+                        position: 'absolute', 
+                        right: '12px', 
+                        top: '50%', 
+                        transform: 'translateY(-50%)',
+                        color: 'var(--accent-primary)',
+                        animation: 'spin 1s linear infinite'
+                      }} 
+                    />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchReniecData(true)}
+                  disabled={loading || reniecLoading || dni.length !== 8}
+                  className="btn btn-primary"
+                  style={{ padding: '0 12px', height: '42px', flexShrink: 0 }}
+                  title="Buscar en RENIEC"
+                >
+                  <Search size={18} />
+                </button>
               </div>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Apellidos y Nombres</label>
+              <label className="form-label">Apellido Paterno</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="Ej. Perez Gomez Juan"
-                value={apellidosNombres}
-                onChange={(e) => setApellidosNombres(e.target.value.toUpperCase())}
+                placeholder="Ej. PEREZ"
+                value={apellidoPn}
+                onChange={(e) => setApellidoPn(e.target.value.toUpperCase())}
                 style={{ textTransform: 'uppercase' }}
                 disabled={loading}
               />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Apellido Materno</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Ej. GOMEZ"
+                value={apellidoMn}
+                onChange={(e) => setApellidoMn(e.target.value.toUpperCase())}
+                style={{ textTransform: 'uppercase' }}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Nombres</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Ej. JUAN CARLOS"
+                value={nombres}
+                onChange={(e) => setNombres(e.target.value.toUpperCase())}
+                style={{ textTransform: 'uppercase' }}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Cód. Modular</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Ingrese Cód. Modular"
+                value={codModular}
+                onChange={(e) => setCodModular(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Fecha de Emisión</label>
+              <input
+                type="date"
+                className="form-input"
+                value={fechaEmision}
+                onChange={(e) => setFechaEmision(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Estado</label>
+              <select
+                className="form-input"
+                value={estado}
+                onChange={(e) => setEstado(e.target.value)}
+                disabled={loading}
+              >
+                <option value="VIGENTES">VIGENTES</option>
+                <option value="CANCELADOS">CANCELADOS</option>
+                <option value="NO TRABAJAN">NO TRABAJAN</option>
+              </select>
             </div>
 
             <div className="form-group">
@@ -915,7 +942,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
                 {previewError ? (
                   <div className="preview-placeholder" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
                     <AlertOctagon size={40} style={{ color: 'var(--color-danger)' }} />
-                    <h4 style={{ color: '#fca5a5', fontSize: '0.9rem', margin: 0 }}>Archivo no disponible (404)</h4>
+                    <h4 style={{ color: 'var(--color-danger)', fontSize: '0.9rem', margin: 0 }}>Archivo no disponible (404)</h4>
                     <p style={{ fontSize: '0.75rem', margin: 0, lineHeight: 1.4, maxWidth: '280px' }}>
                       El documento no está accesible en este entorno local o el archivo no existe físicamente en el disco.
                     </p>
@@ -999,7 +1026,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
 
             {/* Camera Error Message */}
             {cameraError && (
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '6px', color: '#fca5a5', fontSize: '0.8rem' }}>
+              <div style={{ background: 'var(--color-danger-bg)', border: '1px solid var(--color-danger-border)', padding: '10px', borderRadius: '6px', color: 'var(--color-danger)', fontSize: '0.8rem' }}>
                 {cameraError}
               </div>
             )}
@@ -1113,7 +1140,7 @@ const AuthorizationForm = ({ isOpen, onClose, onSave, authorization, token }) =>
       {/* Saving Loader Overlay */}
       {(submitting || loading) && (
         <div className="saving-loader-overlay">
-          <div className="saving-loader-card glass-panel" style={{ background: '#111827' }}>
+          <div className="saving-loader-card glass-panel" style={{ background: 'var(--bg-secondary)' }}>
             <div className="saving-spinner-ring">
               <div className="saving-spinner-glow"></div>
             </div>
