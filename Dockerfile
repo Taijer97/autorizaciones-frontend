@@ -19,7 +19,6 @@ RUN echo 'server { \
     listen 3002; \
     client_max_body_size 50M; \
     server_name _; \
-    client_max_body_size 50M; \
     \
     root /usr/share/nginx/html; \
     index index.html; \
