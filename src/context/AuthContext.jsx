@@ -35,7 +35,8 @@ export const AuthProvider = ({ children }) => {
               can_read: hasBypass || data.can_read,
               can_update: hasBypass || data.can_update,
               can_delete: hasBypass || data.can_delete,
-              is_authorized: data.is_authorized
+              is_authorized: data.is_authorized,
+              must_change_pin: data.must_change_pin
             };
             setUser(updatedUser);
             localStorage.setItem('cb_user', JSON.stringify(updatedUser));

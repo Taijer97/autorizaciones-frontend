@@ -27,6 +27,7 @@ const Dashboard = () => {
   const [mainTab, setMainTab] = useState('vigentes'); // 'vigentes', 'inactivos'
   const [tableTab, setTableTab] = useState('all'); // 'all', 'expired', 'expiring'
   const [observationAlerts, setObservationAlerts] = useState([]);
+  const [alertsExpanded, setAlertsExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const canCreateAuth = user ? (user.role === 'superadmin' || user.can_create) : false;
@@ -63,8 +64,12 @@ const Dashboard = () => {
   const [wsTrigger, setWsTrigger] = useState(0);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/login');
+    if (!authLoading) {
+      if (!user) {
+        navigate('/login');
+      } else if (user.must_change_pin) {
+        navigate('/change-pin');
+      }
     }
   }, [user, authLoading, navigate]);
 
@@ -211,22 +216,32 @@ const Dashboard = () => {
     }
   };
 
+  // Cargar sedes solo al montar
   useEffect(() => {
     if (user) {
-      fetchAuthorizations();
       fetchSedes();
     }
-  }, [user, selectedSede, selectedStatus]); // Fetch on filters change
+  }, [user]);
+
+  // Búsqueda progresiva y actualización por filtros con debounce
+  useEffect(() => {
+    if (!user) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      fetchAuthorizations();
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [user, selectedSede, selectedStatus, searchDni]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedSede, selectedStatus, searchDni, tableTab, mainTab]);
 
-  // Run search when pressing enter or clicking search button
+  // Evitar recarga del formulario al presionar Enter
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    fetchAuthorizations();
   };
 
     // Setup WebSocket connection
@@ -235,7 +250,7 @@ const Dashboard = () => {
 
     // Detect websocket url
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws-api`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws-api?token=${user.access_token}`;
 
     console.log(`Conectando a WebSocket en: ${wsUrl}`);
     const socket = new WebSocket(wsUrl);
@@ -555,6 +570,9 @@ const Dashboard = () => {
                 <option value="complete">Expedientes Completos</option>
                 <option value="missing_principal">Falta Aut. Principal</option>
                 <option value="missing_others">Faltan Secundarios</option>
+                <option value="missing_respaldo">Falta Respaldo</option>
+                <option value="missing_declaracion">Falta Dec. Jurada</option>
+                <option value="missing_dni">Falta DNI</option>
               </select>
             </div>
 
@@ -563,6 +581,75 @@ const Dashboard = () => {
             </button>
           </div>
         </section>
+
+        {/* Accordion Alertas */}
+        {observationAlerts.length > 0 && (
+          <section className="glass-panel" style={{ border: '1px solid var(--color-warning-border)', borderRadius: '10px', overflow: 'hidden' }}>
+            <button
+              className="accordion-header"
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 16px', background: 'var(--color-warning-bg)', border: 'none', cursor: 'pointer'
+              }}
+              onClick={() => setAlertsExpanded(!alertsExpanded)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-warning)' }}>
+                <AlertTriangle size={20} />
+                <span style={{ fontWeight: 700 }}>Se encontraron {observationAlerts.length} observación(es) pendiente(s)</span>
+              </div>
+              <div style={{ color: 'var(--color-warning)', display: 'flex', alignItems: 'center' }}>
+                {alertsExpanded ? <span style={{ fontSize: '1.2rem' }}>−</span> : <span style={{ fontSize: '1.2rem' }}>+</span>}
+              </div>
+            </button>
+            {alertsExpanded && (
+              <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {observationAlerts.map(auth => (
+                  <div key={auth.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '6px 12px', background: 'var(--bg-glass)', border: '1px solid var(--color-warning-border)', borderRadius: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--color-warning)', background: 'var(--color-warning-bg)', padding: '2px 6px', borderRadius: '4px' }}>
+                        {auth.sede}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                        {`${auth.apellido_pn} ${auth.apellido_mn} ${auth.nombres}`}
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis' }} title={auth.observaciones}>
+                        — "{auth.observaciones}"
+                      </span>
+                    </div>
+                    <button 
+                      className="btn btn-primary" 
+                      style={{ background: 'var(--color-success)', borderColor: 'var(--color-success)', color: '#fff', fontSize: '0.75rem', padding: '4px 10px', gap: '4px', flexShrink: 0 }}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/authorizations/${auth.id}/clear-observation`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${user.access_token}` }
+                          });
+                          if (!res.ok) {
+                            const errData = await res.json();
+                            throw new Error(errData.detail || 'Error al completar la observación');
+                          }
+                          setObservationAlerts(prev => {
+                             const updated = prev.filter(item => item.id !== auth.id);
+                             if (updated.length === 0) setAlertsExpanded(false);
+                             return updated;
+                          });
+                          invalidateCache('cache_auths');
+                          fetchAuthorizations(true);
+                        } catch (err) {
+                          alert(err.message);
+                        }
+                      }}
+                    >
+                      <CheckCircle2 size={12} />
+                      Completada
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Data Table */}
         <section className="glass-panel table-panel">
@@ -915,76 +1002,6 @@ const Dashboard = () => {
         token={user.access_token}
       />
 
-      {observationAlerts.length > 0 && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content glass-panel" style={{ maxWidth: '500px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
-            <div className="modal-header" style={{ borderBottom: '1px solid rgba(245, 158, 11, 0.2)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24' }}>
-                <AlertTriangle size={24} />
-                <h2 className="modal-title" style={{ fontSize: '1.25rem', color: '#fbbf24', margin: 0 }}>Alerta de Observación</h2>
-              </div>
-              <button className="modal-close-btn" onClick={() => setObservationAlerts([])}>
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                Se encontraron observaciones pendientes para el DNI consultado:
-              </p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-                {observationAlerts.map(auth => (
-                  <div key={auth.id} className="glass-panel" style={{ padding: '14px', background: 'rgba(245, 158, 11, 0.05)', borderColor: 'rgba(245, 158, 11, 0.2)', borderRadius: '8px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>
-                        Sede: {auth.sede} | {`${auth.apellido_pn} ${auth.apellido_mn} ${auth.nombres}`}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.95rem', color: '#fef08a', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', borderLeft: '3px solid #fbbf24', fontStyle: 'italic', marginBottom: '12px' }}>
-                      "{auth.observaciones}"
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button 
-                        className="btn btn-primary" 
-                        style={{ background: 'var(--color-success)', borderColor: 'var(--color-success)', color: '#fff', fontSize: '0.8rem', padding: '6px 12px', gap: '4px' }}
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(`/api/authorizations/${auth.id}/clear-observation`, {
-                              method: 'POST',
-                              headers: { 'Authorization': `Bearer ${user.access_token}` }
-                            });
-                            if (!res.ok) {
-                              const errData = await res.json();
-                              throw new Error(errData.detail || 'Error al completar la observación');
-                            }
-                            // Remove from local list
-                            setObservationAlerts(prev => prev.filter(item => item.id !== auth.id));
-                            // Refresh list
-                            invalidateCache('cache_auths');
-                            fetchAuthorizations(true);
-                          } catch (err) {
-                            alert(err.message);
-                          }
-                        }}
-                      >
-                        <CheckCircle2 size={14} />
-                        Observación Completada
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div className="form-actions" style={{ marginTop: 0, paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <button className="btn btn-secondary" onClick={() => setObservationAlerts([])}>
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Real-time WebSocket Toasts floating at bottom-right */}
       <div className="toast-container">

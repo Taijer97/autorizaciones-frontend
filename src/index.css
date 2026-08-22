@@ -108,11 +108,17 @@ body.light-mode {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  zoom: 0.8; /* 80% scale as requested */
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   overflow-x: hidden;
-  min-height: 100vh;
+  min-height: 125vh; /* 100vh / 0.8 to compensate for zoom */
+  width: 125vw;      /* 100vw / 0.8 to compensate for zoom */
+  margin: 0;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 

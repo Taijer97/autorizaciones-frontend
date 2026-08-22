@@ -5,7 +5,8 @@ import { DownloadContext } from '../context/DownloadContext';
 import { 
   Building2, Users, ArrowLeft, Plus, Trash2, Edit2, 
   ShieldAlert, ShieldCheck, Key, FileText, CheckCircle2, 
-  AlertTriangle, Loader2, X, RefreshCw, Download, Sun, Moon
+  AlertTriangle, Loader2, X, RefreshCw, Download, Sun, Moon,
+  GitCompareArrows, Search, AlertCircle, ChevronDown, ChevronRight, Ban
 } from 'lucide-react';
 import useTheme from '../hooks/useTheme';
 import './AdminDashboard.css';
@@ -30,6 +31,21 @@ const AdminDashboard = () => {
   const [exportStateFilter, setExportStateFilter] = useState('VIGENTES');
   const [exportSedeId, setExportSedeId] = useState(''); 
   const [exportLoading, setExportLoading] = useState(false);
+
+  // Excel specific export states
+  const [excelSedeId, setExcelSedeId] = useState('');
+  const [excelStateFilter, setExcelStateFilter] = useState('VIGENTES');
+  
+  // Reconciliation states
+  const [reconSedeId, setReconSedeId] = useState('');
+  const [reconJobId, setReconJobId] = useState(null);
+  const [reconStatus, setReconStatus] = useState(null); // null, 'starting', 'processing', 'done', 'error'
+  const [reconProgress, setReconProgress] = useState({ total: 0, progreso: 0 });
+  const [reconResults, setReconResults] = useState(null);
+  const [reconError, setReconError] = useState('');
+  const [reconExpandedSection, setReconExpandedSection] = useState('cancelados');
+  const [reconCancelling, setReconCancelling] = useState(new Set());
+  const [reconImporting, setReconImporting] = useState(new Set());
   
   // Loading & error states
   const [loading, setLoading] = useState(false);
@@ -47,6 +63,7 @@ const AdminDashboard = () => {
   const [contactNumber, setContactNumber] = useState('+51 ');
   const [isAuthorized, setIsAuthorized] = useState(true);
   const [password, setPassword] = useState(''); // Stores PIN
+  const [mustChangePin, setMustChangePin] = useState(false);
   const [role, setRole] = useState('user');
   const [canCreate, setCanCreate] = useState(false);
   const [canRead, setCanRead] = useState(true);
@@ -58,6 +75,8 @@ const AdminDashboard = () => {
     if (!authLoading) {
       if (!user) {
         navigate('/login');
+      } else if (user.must_change_pin) {
+        navigate('/change-pin');
       } else if (user.role !== 'superadmin' && user.role !== 'admin') {
         // Standard users cannot access admin panel
         navigate('/dashboard');
@@ -210,6 +229,7 @@ const AdminDashboard = () => {
     setCanUpdate(false);
     setCanDelete(false);
     setSelectedSedeIds([]);
+    setMustChangePin(false);
   };
 
   const handleEditUserClick = (targetUser) => {
@@ -219,6 +239,7 @@ const AdminDashboard = () => {
     setIsAuthorized(targetUser.is_authorized);
     setFullName(targetUser.full_name);
     setPassword(''); // Leave blank unless changing PIN
+    setMustChangePin(targetUser.must_change_pin || false);
     setRole(targetUser.role);
     setCanCreate(targetUser.can_create);
     setCanRead(targetUser.can_read);
@@ -257,7 +278,8 @@ const AdminDashboard = () => {
       return;
     }
 
-    if (password && isEasyPin(password)) {
+    // Allow easy PINs ONLY if we are forcing the user to change it anyway
+    if (password && isEasyPin(password) && !mustChangePin) {
       setError('Por seguridad, no se permiten PINs fáciles, secuenciales o repetitivos (ej. 123456, 111111, 121212).');
       return;
     }
@@ -278,6 +300,7 @@ const AdminDashboard = () => {
         can_read: role === 'admin' ? true : canRead,
         can_update: role === 'admin' ? true : canUpdate,
         can_delete: role === 'admin' ? true : canDelete,
+        must_change_pin: mustChangePin,
         sede_ids: selectedSedeIds
       };
 
@@ -436,6 +459,13 @@ const AdminDashboard = () => {
             >
               <Download size={16} />
               <span>Exportación Masiva</span>
+            </button>
+            <button 
+              className={`tab-btn ${activeTab === 'reconciliation' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('reconciliation'); setError(''); setSuccess(''); }}
+            >
+              <GitCompareArrows size={16} />
+              <span>Conciliación</span>
             </button>
           </div>
 
@@ -615,6 +645,20 @@ const AdminDashboard = () => {
                     disabled={loading}
                     maxLength={6}
                   />
+                  {password && (
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input 
+                        type="checkbox" 
+                        id="mustChangePin" 
+                        checked={mustChangePin} 
+                        onChange={(e) => setMustChangePin(e.target.checked)} 
+                        disabled={loading}
+                      />
+                      <label htmlFor="mustChangePin" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                        Forzar al usuario a cambiar este PIN en su próximo inicio de sesión
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -862,109 +906,111 @@ const AdminDashboard = () => {
         )}
 
         {activeTab === 'export' && (
-          <div className="glass-panel admin-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '30px' }}>
-            <h2 className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <Download size={20} style={{ color: 'var(--accent-primary)' }} /> 
-              <span>Exportar Expedientes (Empaquetado ZIP)</span>
-            </h2>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
-              Descarga masiva de los documentos de autorización escaneados. Los archivos PDF/imagen se organizarán automáticamente dentro del archivo ZIP en carpetas por <strong>Sede</strong> y <strong>DNI / Nombre del Trabajador</strong>.
-            </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', maxWidth: '1000px', margin: '0 auto' }}>
+            
+            {/* BOX 1: ZIP EXPORT */}
+            <div className="glass-panel admin-card" style={{ padding: '24px' }}>
+              <h2 className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Download size={20} style={{ color: 'var(--accent-primary)' }} /> 
+                <span>Archivos y Expedientes (ZIP)</span>
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>
+                Descarga masiva de los documentos escaneados. Organizados en carpetas por Sede y Trabajador.
+              </p>
 
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              setError('');
-              setSuccess('');
-              setExportLoading(true);
-              try {
-                const params = new URLSearchParams();
-                if (exportDocType) params.append('doc_type', exportDocType);
-                if (exportStatusFilter) params.append('status_filter', exportStatusFilter);
-                if (exportStateFilter) params.append('state_filter', exportStateFilter);
-                if (exportSedeId) params.append('sede_id', exportSedeId);
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setError('');
+                setSuccess('');
+                setExportLoading(true);
+                try {
+                  const params = new URLSearchParams();
+                  if (exportDocType) params.append('doc_type', exportDocType);
+                  if (exportStatusFilter) params.append('status_filter', exportStatusFilter);
+                  if (exportStateFilter) params.append('state_filter', exportStateFilter);
+                  if (exportSedeId) params.append('sede_id', exportSedeId);
 
-                addDownload({
-                  url: `/api/authorizations/admin/export/zip?${params.toString()}`,
-                  filename: `Export_CB_${new Date().toISOString().slice(0,10)}.zip`,
-                  token: user.access_token,
-                  type: 'zip'
-                });
+                  addDownload({
+                    url: `/api/authorizations/admin/export/zip?${params.toString()}`,
+                    filename: `Export_CB_${new Date().toISOString().slice(0,10)}.zip`,
+                    token: user.access_token,
+                    type: 'zip'
+                  });
+                  
+                  setSuccess('Descarga ZIP iniciada. Puedes ver el progreso en la esquina inferior derecha.');
+                } catch (err) {
+                  setError(err.message);
+                } finally {
+                  setExportLoading(false);
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 
-                setSuccess('Descarga iniciada. Puedes ver el progreso en la esquina inferior derecha.');
-              } catch (err) {
-                setError(err.message);
-              } finally {
-                setExportLoading(false);
-              }
-            }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              <div className="form-group">
-                <label className="form-label">Filtrar por Sede</label>
-                <select 
-                  className="form-input"
-                  value={exportSedeId}
-                  onChange={(e) => setExportSedeId(e.target.value)}
-                  disabled={exportLoading}
-                >
-                  <option value="">Todas las Sedes</option>
-                  {sedes.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
+                <div className="form-group">
+                  <label className="form-label">Filtrar por Sede</label>
+                  <select 
+                    className="form-input"
+                    value={exportSedeId}
+                    onChange={(e) => setExportSedeId(e.target.value)}
+                    disabled={exportLoading}
+                  >
+                    <option value="">Todas las Sedes</option>
+                    {sedes.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Tipo de Documento a Extraer</label>
-                <select 
-                  className="form-input"
-                  value={exportDocType}
-                  onChange={(e) => setExportDocType(e.target.value)}
-                  disabled={exportLoading}
-                >
-                  <option value="all">Todos los Documentos (Expediente completo)</option>
-                  <option value="principal">1. Autorización Principal</option>
-                  <option value="duplicado">2. Autorización Duplicado</option>
-                  <option value="respaldo">3. Autorización Respaldo</option>
-                  <option value="declaracion">4. Declaración Jurada</option>
-                  <option value="copia_dni">5. Copia DNI</option>
-                </select>
-              </div>
+                <div className="form-group">
+                  <label className="form-label">Tipo de Documento a Extraer</label>
+                  <select 
+                    className="form-input"
+                    value={exportDocType}
+                    onChange={(e) => setExportDocType(e.target.value)}
+                    disabled={exportLoading}
+                  >
+                    <option value="all">Todos los Documentos (Expediente completo)</option>
+                    <option value="principal">1. Autorización Principal</option>
+                    <option value="duplicado">2. Autorización Duplicado</option>
+                    <option value="respaldo">3. Autorización Respaldo</option>
+                    <option value="declaracion">4. Declaración Jurada</option>
+                    <option value="copia_dni">5. Copia DNI</option>
+                  </select>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Estado de Vigencia / Vencimiento</label>
-                <select 
-                  className="form-input"
-                  value={exportStatusFilter}
-                  onChange={(e) => setExportStatusFilter(e.target.value)}
-                  disabled={exportLoading}
-                >
-                  <option value="all">Todos los Registros</option>
-                  <option value="ok">Documentos OK (No por vencer, ni vencidos)</option>
-                  <option value="expired">Solo Contratos VENCIDOS</option>
-                  <option value="expiring">Solo Contratos POR VENCER (1 mes)</option>
-                </select>
-              </div>
+                <div className="form-group">
+                  <label className="form-label">Estado de Vigencia</label>
+                  <select 
+                    className="form-input"
+                    value={exportStatusFilter}
+                    onChange={(e) => setExportStatusFilter(e.target.value)}
+                    disabled={exportLoading}
+                  >
+                    <option value="all">Todos los Registros</option>
+                    <option value="ok">Documentos OK (No por vencer, ni vencidos)</option>
+                    <option value="expired">Solo Contratos VENCIDOS</option>
+                    <option value="expiring">Solo Contratos POR VENCER (1 mes)</option>
+                  </select>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Estado del Trabajador</label>
-                <select 
-                  className="form-input"
-                  value={exportStateFilter}
-                  onChange={(e) => setExportStateFilter(e.target.value)}
-                  disabled={exportLoading}
-                >
-                  <option value="all">Todos</option>
-                  <option value="VIGENTES">VIGENTES</option>
-                  <option value="CANCELADOS">CANCELADOS</option>
-                  <option value="NO TRABAJAN">NO TRABAJAN</option>
-                </select>
-              </div>
+                <div className="form-group">
+                  <label className="form-label">Estado del Trabajador</label>
+                  <select 
+                    className="form-input"
+                    value={exportStateFilter}
+                    onChange={(e) => setExportStateFilter(e.target.value)}
+                    disabled={exportLoading}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="VIGENTES">VIGENTES</option>
+                    <option value="CANCELADOS">CANCELADOS</option>
+                    <option value="NO TRABAJAN">NO TRABAJAN</option>
+                  </select>
+                </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                 <button 
                   type="submit" 
                   className="btn btn-primary" 
-                  style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600 }}
+                  style={{ width: '100%', padding: '12px', marginTop: '4px', fontSize: '0.98rem', fontWeight: 600 }}
                   disabled={exportLoading || isDownloadingZip}
                 >
                   {isDownloadingZip ? (
@@ -979,10 +1025,58 @@ const AdminDashboard = () => {
                     </>
                   )}
                 </button>
+              </form>
+            </div>
+
+            {/* BOX 2: EXCEL EXPORT */}
+            <div className="glass-panel admin-card" style={{ padding: '24px' }}>
+              <h2 className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--color-success)' }}>
+                <FileText size={20} /> 
+                <span>Reporte de Datos (EXCEL)</span>
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>
+                Descarga una hoja de cálculo con los datos de las autorizaciones. <br/>
+                <span style={{ color: 'var(--color-info)' }}>* Por defecto exporta Todos los Registros sin filtrar por vigencia.</span>
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Filtrar por Sede</label>
+                  <select 
+                    className="form-input"
+                    value={excelSedeId}
+                    onChange={(e) => setExcelSedeId(e.target.value)}
+                    disabled={exportLoading}
+                  >
+                    <option value="">Todas las Sedes</option>
+                    {sedes.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Estado del Trabajador</label>
+                  <select 
+                    className="form-input"
+                    value={excelStateFilter}
+                    onChange={(e) => setExcelStateFilter(e.target.value)}
+                    disabled={exportLoading}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="VIGENTES">VIGENTES</option>
+                    <option value="CANCELADOS">CANCELADOS</option>
+                    <option value="NO TRABAJAN">NO TRABAJAN</option>
+                  </select>
+                </div>
+
+                {/* Empty spacer to align buttons if needed, or just margin */}
+                <div style={{ flexGrow: 1 }}></div>
+
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600, background: 'var(--color-success-bg)', color: 'var(--color-success)', borderColor: 'var(--color-success-border)' }}
+                  style={{ width: '100%', padding: '12px', marginTop: '4px', fontSize: '0.98rem', fontWeight: 600, background: 'var(--color-success-bg)', color: 'var(--color-success)', borderColor: 'var(--color-success-border)' }}
                   disabled={exportLoading || isDownloadingExcel}
                   onClick={async () => {
                     setError('');
@@ -990,9 +1084,12 @@ const AdminDashboard = () => {
                     setExportLoading(true);
                     try {
                       const params = new URLSearchParams();
-                      if (exportStatusFilter) params.append('status_filter', exportStatusFilter);
-                      if (exportStateFilter) params.append('state_filter', exportStateFilter);
-                      if (exportSedeId) params.append('sede_id', exportSedeId);
+                      
+                      // Regla interna: Todos los registros por defecto
+                      params.append('status_filter', 'all');
+                      
+                      if (excelStateFilter) params.append('state_filter', excelStateFilter);
+                      if (excelSedeId) params.append('sede_id', excelSedeId);
                       
                       addDownload({
                         url: `/api/authorizations/admin/export/excel?${params.toString()}`,
@@ -1022,7 +1119,540 @@ const AdminDashboard = () => {
                   )}
                 </button>
               </div>
-            </form>
+            </div>
+
+          </div>
+        )}
+
+        {/* RECONCILIATION TAB */}
+        {activeTab === 'reconciliation' && (
+          <div className="glass-panel admin-card" style={{ maxWidth: '100%' }}>
+            <h2 className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <GitCompareArrows size={20} style={{ color: 'var(--accent-primary)' }} />
+              <span>Conciliación: API Externa vs Base de Datos Local</span>
+            </h2>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Compara los créditos activos registrados en el sistema externo (GNSIS) contra las autorizaciones almacenadas localmente. 
+              Detecta automáticamente cancelaciones, datos que difieren y registros faltantes.
+            </p>
+
+            {/* Start Form */}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '24px' }}>
+              <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: '200px' }}>
+                <label className="form-label">Seleccionar Sede a Conciliar</label>
+                <select
+                  className="form-input"
+                  value={reconSedeId}
+                  onChange={(e) => setReconSedeId(e.target.value)}
+                  disabled={reconStatus === 'starting' || reconStatus === 'processing'}
+                >
+                  <option value="">-- Selecciona una Sede --</option>
+                  {sedes.filter(s => s.tag).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} (TAG: {s.tag})</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="btn btn-primary"
+                style={{ padding: '10px 24px', fontWeight: 600, height: 'fit-content' }}
+                disabled={!reconSedeId || reconStatus === 'starting' || reconStatus === 'processing'}
+                onClick={async () => {
+                  setReconError('');
+                  setReconResults(null);
+                  setReconStatus('starting');
+                  try {
+                    const res = await fetch(`/api/reconciliation/start?sede_id=${reconSedeId}`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${user.access_token}` }
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail || 'Error al iniciar conciliación');
+                    
+                    setReconJobId(data.job_id);
+                    setReconStatus('processing');
+                    
+                    // Start polling
+                    const pollInterval = setInterval(async () => {
+                      try {
+                        const statusRes = await fetch(`/api/reconciliation/status/${data.job_id}`, {
+                          headers: { 'Authorization': `Bearer ${user.access_token}` }
+                        });
+                        const statusData = await statusRes.json();
+                        if (!statusRes.ok) throw new Error(statusData.detail || 'Error polling');
+                        
+                        setReconProgress({ total: statusData.total, progreso: statusData.progreso });
+                        
+                        if (statusData.status === 'done') {
+                          clearInterval(pollInterval);
+                          // Fetch results
+                          const resultsRes = await fetch(`/api/reconciliation/results/${data.job_id}?sede_id=${reconSedeId}`, {
+                            headers: { 'Authorization': `Bearer ${user.access_token}` }
+                          });
+                          const resultsData = await resultsRes.json();
+                          if (!resultsRes.ok) throw new Error(resultsData.detail || 'Error obteniendo resultados');
+                          
+                          setReconResults(resultsData);
+                          setReconStatus('done');
+                        } else if (statusData.status === 'error' || statusData.error) {
+                          clearInterval(pollInterval);
+                          setReconError(statusData.error || 'Error en el proceso externo');
+                          setReconStatus('error');
+                        }
+                      } catch (err) {
+                        clearInterval(pollInterval);
+                        setReconError(err.message);
+                        setReconStatus('error');
+                      }
+                    }, 3000);
+                  } catch (err) {
+                    setReconError(err.message);
+                    setReconStatus('error');
+                  }
+                }}
+              >
+                {reconStatus === 'starting' || reconStatus === 'processing' ? (
+                  <><Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> Procesando...</>
+                ) : (
+                  <><Search size={16} /> Iniciar Conciliación</>
+                )}
+              </button>
+            </div>
+
+            {sedes.filter(s => !s.tag).length > 0 && (
+              <div style={{ fontSize: '0.8rem', color: 'var(--color-warning)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={14} />
+                <span>Las sedes sin TAG no aparecen en la lista. Configura el TAG en "Sedes del Sistema" para habilitarlas.</span>
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            {reconStatus === 'processing' && (
+              <div style={{ marginBottom: '24px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                  <span>Consultando API externa...</span>
+                  <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>
+                    {reconProgress.progreso}/{reconProgress.total || '?'}
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: reconProgress.total > 0 ? `${Math.round((reconProgress.progreso / reconProgress.total) * 100)}%` : '30%',
+                    height: '100%',
+                    background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)',
+                    transition: 'width 0.3s ease-out',
+                    animation: reconProgress.total === 0 ? 'pulse 1.5s ease-in-out infinite' : undefined
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {reconError && (
+              <div className="alert-box alert-box-danger" style={{ marginBottom: '16px' }}>
+                <AlertTriangle size={16} /> {reconError}
+              </div>
+            )}
+
+            {/* Results */}
+            {reconResults && reconStatus === 'done' && (
+              <div>
+                {/* Summary Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+                  <div style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '10px', padding: '16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#22c55e' }}>{reconResults.summary.coinciden}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>✅ Coinciden</div>
+                  </div>
+                  <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '10px', padding: '16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#f59e0b' }}>{reconResults.summary.datos_difieren}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>⚠️ Difieren</div>
+                  </div>
+                  <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ef4444' }}>{reconResults.summary.cancelados}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>🔴 Cancelados</div>
+                  </div>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3b82f6' }}>{reconResults.summary.falta_ingresar}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>🆕 Faltantes</div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  {reconResults.sede} ({reconResults.convenio}) — API: {reconResults.summary.total_api} créditos | Local: {reconResults.summary.total_local} autorizaciones vigentes
+                </div>
+
+                {/* Collapsible Sections */}
+                {/* CANCELADOS */}
+                {reconResults.summary.cancelados > 0 && (
+                  <div style={{ marginBottom: '16px', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReconExpandedSection(reconExpandedSection === 'cancelados' ? '' : 'cancelados')}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: 'rgba(239, 68, 68, 0.08)', border: 'none', color: '#ef4444', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      {reconExpandedSection === 'cancelados' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      🔴 Posibles Cancelados ({reconResults.summary.cancelados}) — En DB local pero NO en API
+                    </button>
+                    {reconExpandedSection === 'cancelados' && (
+                      <div style={{ padding: '12px', overflowX: 'auto' }}>
+                        <table className="custom-table" style={{ fontSize: '0.82rem' }}>
+                          <thead>
+                            <tr>
+                              <th>DNI</th>
+                              <th>Nombre (Local)</th>
+                              <th>Monto</th>
+                              <th>Cuotas</th>
+                              <th>Mensual</th>
+                              <th style={{ textAlign: 'right' }}>Acción</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reconResults.details.cancelados.map((item, idx) => (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: 700 }}>{item.dni}</td>
+                                <td>{item.nombre_db}</td>
+                                <td>S/ {parseFloat(item.monto_db).toFixed(2)}</td>
+                                <td>{item.cuotas_db}</td>
+                                <td>S/ {parseFloat(item.cuota_mensual_db).toFixed(2)}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <button
+                                    className="btn btn-danger"
+                                    style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                                    disabled={reconCancelling.has(item.auth_id)}
+                                    onClick={async () => {
+                                      if (!window.confirm(`¿Marcar como CANCELADO a ${item.nombre_db} (${item.dni})?`)) return;
+                                      setReconCancelling(prev => new Set([...prev, item.auth_id]));
+                                      try {
+                                        const res = await fetch('/api/reconciliation/bulk-cancel', {
+                                          method: 'PUT',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${user.access_token}`
+                                          },
+                                          body: JSON.stringify({ auth_ids: [item.auth_id] })
+                                        });
+                                        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+                                        // Remove from list
+                                        setReconResults(prev => ({
+                                          ...prev,
+                                          summary: { ...prev.summary, cancelados: prev.summary.cancelados - 1 },
+                                          details: {
+                                            ...prev.details,
+                                            cancelados: prev.details.cancelados.filter(c => c.auth_id !== item.auth_id)
+                                          }
+                                        }));
+                                        showSuccessMessage(`${item.nombre_db} marcado como CANCELADO.`);
+                                      } catch (err) {
+                                        setReconError(err.message);
+                                      } finally {
+                                        setReconCancelling(prev => { const n = new Set(prev); n.delete(item.auth_id); return n; });
+                                      }
+                                    }}
+                                  >
+                                    {reconCancelling.has(item.auth_id) ? <Loader2 size={12} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> : <Ban size={12} />}
+                                    {' '}Cancelar
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+
+                        {reconResults.details.cancelados.length > 1 && (
+                          <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                            <button
+                              className="btn btn-danger"
+                              style={{ fontSize: '0.8rem' }}
+                              onClick={async () => {
+                                const ids = reconResults.details.cancelados.map(c => c.auth_id);
+                                if (!window.confirm(`¿Marcar ${ids.length} autorización(es) como CANCELADOS?`)) return;
+                                setReconCancelling(new Set(ids));
+                                try {
+                                  const res = await fetch('/api/reconciliation/bulk-cancel', {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${user.access_token}`
+                                    },
+                                    body: JSON.stringify({ auth_ids: ids })
+                                  });
+                                  if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+                                  setReconResults(prev => ({
+                                    ...prev,
+                                    summary: { ...prev.summary, cancelados: 0 },
+                                    details: { ...prev.details, cancelados: [] }
+                                  }));
+                                  showSuccessMessage(`${ids.length} autorización(es) marcada(s) como CANCELADOS.`);
+                                } catch (err) {
+                                  setReconError(err.message);
+                                } finally {
+                                  setReconCancelling(new Set());
+                                }
+                              }}
+                            >
+                              <Ban size={14} /> Cancelar Todos ({reconResults.details.cancelados.length})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* DATOS DIFIEREN */}
+                {reconResults.summary.datos_difieren > 0 && (
+                  <div style={{ marginBottom: '16px', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReconExpandedSection(reconExpandedSection === 'difieren' ? '' : 'difieren')}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: 'rgba(245, 158, 11, 0.08)', border: 'none', color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      {reconExpandedSection === 'difieren' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      ⚠️ Datos que Difieren ({reconResults.summary.datos_difieren}) — Existen en ambos pero no coinciden
+                    </button>
+                    {reconExpandedSection === 'difieren' && (
+                      <div style={{ padding: '12px', overflowX: 'auto' }}>
+                        <table className="custom-table" style={{ fontSize: '0.82rem' }}>
+                          <thead>
+                            <tr>
+                              <th>DNI</th>
+                              <th>Nombre</th>
+                              <th>Cód. Mod (API/Local)</th>
+                              <th>F. Emisión (API/Local)</th>
+                              <th>Cuotas (API/Local)</th>
+                              <th>Mensual (API/Local)</th>
+                              <th>Diferencias</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reconResults.details.datos_difieren.map((item, idx) => (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: 700 }}>{item.dni}</td>
+                                <td>{item.nombre_api}</td>
+                                <td style={{ color: item.diferencias?.includes('codigo_modular') ? '#f59e0b' : undefined, fontWeight: item.diferencias?.includes('codigo_modular') ? 700 : undefined }}>
+                                  {item.cod_mod_api || '-'} / {item.cod_mod_db || '-'}
+                                </td>
+                                <td style={{ color: item.diferencias?.includes('fecha_emision') ? '#f59e0b' : undefined, fontWeight: item.diferencias?.includes('fecha_emision') ? 700 : undefined }}>
+                                  {item.fecha_api || '-'} / {item.fecha_db || '-'}
+                                </td>
+                                <td style={{ color: item.diferencias?.includes('numero_cuotas') ? '#f59e0b' : undefined, fontWeight: item.diferencias?.includes('numero_cuotas') ? 700 : undefined }}>
+                                  {item.cuotas_api} / {item.cuotas_db}
+                                </td>
+                                <td style={{ color: item.diferencias?.includes('cuota_mensual') ? '#f59e0b' : undefined, fontWeight: item.diferencias?.includes('cuota_mensual') ? 700 : undefined }}>
+                                  S/ {parseFloat(item.cuota_mensual_api).toFixed(2)} / S/ {parseFloat(item.cuota_mensual_db).toFixed(2)}
+                                </td>
+                                <td>
+                                  {(item.diferencias || []).map(d => (
+                                    <span key={d} style={{ display: 'inline-block', fontSize: '0.7rem', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', padding: '1px 6px', borderRadius: '4px', marginRight: '4px', fontWeight: 600 }}>{d}</span>
+                                  ))}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* FALTA INGRESAR */}
+                {reconResults.summary.falta_ingresar > 0 && (
+                  <div style={{ marginBottom: '16px', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReconExpandedSection(reconExpandedSection === 'faltantes' ? '' : 'faltantes')}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: 'rgba(59, 130, 246, 0.08)', border: 'none', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      {reconExpandedSection === 'faltantes' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      🆕 Faltan Ingresar ({reconResults.summary.falta_ingresar}) — En API pero NO en DB local
+                    </button>
+                    {reconExpandedSection === 'faltantes' && (
+                      <div style={{ padding: '12px', overflowX: 'auto' }}>
+                        <table className="custom-table" style={{ fontSize: '0.82rem' }}>
+                          <thead>
+                            <tr>
+                              <th>DNI</th>
+                              <th>Nombre (API)</th>
+                              <th>Cód. Modular</th>
+                              <th>F. Emisión</th>
+                              <th>Monto Total</th>
+                              <th>Cuotas</th>
+                              <th>Cuota Mensual</th>
+                              <th>Deuda</th>
+                              <th style={{ textAlign: 'right' }}>Acción</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reconResults.details.falta_ingresar.map((item, idx) => (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: 700 }}>{item.dni}</td>
+                                <td>{item.nombre_api}</td>
+                                <td>{item.codigo_modular_api || '-'}</td>
+                                <td>{item.fecha_emision_api || '-'}</td>
+                                <td>S/ {parseFloat(item.monto_api).toFixed(2)}</td>
+                                <td>{item.cuotas_api}</td>
+                                <td>S/ {parseFloat(item.cuota_mensual_api).toFixed(2)}</td>
+                                <td style={{ fontWeight: 600, color: '#ef4444' }}>S/ {parseFloat(item.deuda_total).toFixed(2)}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <button
+                                    className="btn btn-primary"
+                                    style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                                    disabled={reconImporting.has(item.id_credito)}
+                                    onClick={async () => {
+                                      if (!window.confirm(`¿Agregar crédito de ${item.nombre_api} (${item.dni}) a la base de datos local?`)) return;
+                                      setReconImporting(prev => new Set([...prev, item.id_credito]));
+                                      try {
+                                        const res = await fetch('/api/reconciliation/import-missing', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${user.access_token}`
+                                          },
+                                          body: JSON.stringify({
+                                            sede_id: reconSedeId,
+                                            dni: item.dni,
+                                            cliente: item.nombre_api,
+                                            codigo_modular: item.codigo_modular_api,
+                                            fecha_emision: item.fecha_emision_api,
+                                            cuota_mensual: item.cuota_mensual_api,
+                                            numero_cuotas: item.cuotas_api
+                                          })
+                                        });
+                                        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error'); }
+                                        
+                                        // Remove from faltantes list
+                                        setReconResults(prev => ({
+                                          ...prev,
+                                          summary: { ...prev.summary, falta_ingresar: prev.summary.falta_ingresar - 1 },
+                                          details: {
+                                            ...prev.details,
+                                            falta_ingresar: prev.details.falta_ingresar.filter(f => f.id_credito !== item.id_credito)
+                                          }
+                                        }));
+                                        showSuccessMessage(`${item.nombre_api} importado con éxito.`);
+                                      } catch (err) {
+                                        setReconError(err.message);
+                                      } finally {
+                                        setReconImporting(prev => { const n = new Set(prev); n.delete(item.id_credito); return n; });
+                                      }
+                                    }}
+                                  >
+                                    {reconImporting.has(item.id_credito) ? <Loader2 size={12} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={12} />}
+                                    {' '}Agregar
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {reconResults.details.falta_ingresar.length > 1 && (
+                          <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                            <button
+                              className="btn btn-primary"
+                              style={{ fontSize: '0.8rem' }}
+                              onClick={async () => {
+                                if (!window.confirm(`¿Agregar ${reconResults.details.falta_ingresar.length} créditos a la base de datos local?`)) return;
+                                
+                                const allIds = reconResults.details.falta_ingresar.map(f => f.id_credito);
+                                setReconImporting(new Set(allIds));
+                                
+                                let imported = 0;
+                                let errors = 0;
+                                
+                                for (const item of reconResults.details.falta_ingresar) {
+                                  try {
+                                    const res = await fetch('/api/reconciliation/import-missing', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${user.access_token}`
+                                      },
+                                      body: JSON.stringify({
+                                        sede_id: reconSedeId,
+                                        dni: item.dni,
+                                        cliente: item.nombre_api,
+                                        codigo_modular: item.codigo_modular_api,
+                                        fecha_emision: item.fecha_emision_api,
+                                        cuota_mensual: item.cuota_mensual_api,
+                                        numero_cuotas: item.cuotas_api
+                                      })
+                                    });
+                                    if (res.ok) imported++;
+                                    else errors++;
+                                  } catch (e) {
+                                    errors++;
+                                  }
+                                }
+                                
+                                setReconResults(prev => ({
+                                  ...prev,
+                                  summary: { ...prev.summary, falta_ingresar: errors > 0 ? errors : 0 },
+                                  details: { 
+                                    ...prev.details, 
+                                    falta_ingresar: errors > 0 ? prev.details.falta_ingresar : [] 
+                                  }
+                                }));
+                                
+                                setReconImporting(new Set());
+                                
+                                if (errors === 0) {
+                                  showSuccessMessage(`${imported} créditos importados con éxito.`);
+                                } else {
+                                  setReconError(`Se importaron ${imported} créditos, pero fallaron ${errors}. Reintente la conciliación.`);
+                                }
+                              }}
+                            >
+                              <Plus size={14} /> Agregar Todos ({reconResults.details.falta_ingresar.length})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* COINCIDEN */}
+                {reconResults.summary.coinciden > 0 && (
+                  <div style={{ marginBottom: '16px', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReconExpandedSection(reconExpandedSection === 'coinciden' ? '' : 'coinciden')}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: 'rgba(34, 197, 94, 0.08)', border: 'none', color: '#22c55e', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      {reconExpandedSection === 'coinciden' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      ✅ Coinciden ({reconResults.summary.coinciden}) — Todo correcto
+                    </button>
+                    {reconExpandedSection === 'coinciden' && (
+                      <div style={{ padding: '12px', overflowX: 'auto' }}>
+                        <table className="custom-table" style={{ fontSize: '0.82rem' }}>
+                          <thead>
+                            <tr>
+                              <th>DNI</th>
+                              <th>Nombre</th>
+                              <th>Cód. Modular</th>
+                              <th>F. Emisión</th>
+                              <th>Cuotas</th>
+                              <th>Mensual</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reconResults.details.coinciden.map((item, idx) => (
+                              <tr key={idx} className="tr-success">
+                                <td style={{ fontWeight: 700 }}>{item.dni}</td>
+                                <td>{item.nombre_api}</td>
+                                <td>{item.cod_mod_api || '-'}</td>
+                                <td>{item.fecha_api || '-'}</td>
+                                <td>{item.cuotas_api}</td>
+                                <td>S/ {parseFloat(item.cuota_mensual_api).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>

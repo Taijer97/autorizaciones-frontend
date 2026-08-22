@@ -1,5 +1,6 @@
 .dashboard-layout {
-  height: 100vh;
+  height: 125vh;
+  width: 125vw;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);

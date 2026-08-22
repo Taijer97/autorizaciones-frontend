@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import WaitingApproval from './pages/WaitingApproval';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import ChangePin from './pages/ChangePin';
 
 import { DownloadProvider } from './context/DownloadContext';
 
@@ -18,6 +19,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/waiting-approval" element={<WaitingApproval />} />
+            <Route path="/change-pin" element={<ChangePin />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

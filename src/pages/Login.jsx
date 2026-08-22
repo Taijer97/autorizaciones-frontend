@@ -15,9 +15,13 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If already logged in, redirect to dashboard
+    // If already logged in, redirect accordingly
     if (user) {
-      navigate('/dashboard');
+      if (user.must_change_pin) {
+        navigate('/change-pin');
+      } else {
+        navigate('/dashboard');
+      }
     }
   }, [user, navigate]);
 
@@ -53,7 +57,11 @@ const Login = () => {
       }
 
       login(data);
-      navigate('/dashboard');
+      if (data.must_change_pin) {
+        navigate('/change-pin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -133,6 +141,18 @@ const Login = () => {
                 }}
               >
                 {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button 
+                type="button" 
+                onClick={() => alert('Por seguridad, la recuperación de PIN debe ser solicitada directamente a su Administrador. Ellos pueden ingresar al sistema y asignarle un nuevo PIN temporal desde el módulo de Usuarios.')}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--text-muted)',
+                  fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline'
+                }}
+              >
+                ¿Olvidé mi PIN?
               </button>
             </div>
           </div>

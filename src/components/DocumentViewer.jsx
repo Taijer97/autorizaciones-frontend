@@ -198,7 +198,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
               </style>
             </head>
             <body>
-              <img src="${fileUrl}" onload="window.print(); window.close();" />
+              <img src="${fileUrl}&token=${token}" onload="window.print(); window.close();" />
             </body>
           </html>
         `);
@@ -500,7 +500,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
                       <span>Imprimir</span>
                     </button>
                     <a 
-                      href={`/${selectedFile}?t=${Date.now()}`}
+                      href={`/${selectedFile}?t=${Date.now()}&token=${token}`}
                       target="_blank"
                       rel="noreferrer"
                       className="btn btn-secondary"
@@ -516,7 +516,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
                 <div ref={containerRef} className="viewer-preview-body" style={{ overflow: 'auto', display: 'block', padding: '16px' }}>
                   {isPdfFile(selectedFile) ? (
                     <iframe 
-                      src={`/${selectedFile}?t=${Date.now()}`} 
+                      src={`/${selectedFile}?t=${Date.now()}&token=${token}`} 
                       className="preview-iframe"
                       title={selectedTitle}
                     />
@@ -536,7 +536,7 @@ const DocumentViewer = ({ isOpen, onClose, authorization, token }) => {
                       boxSizing: 'border-box'
                     }}>
                       <img 
-                        src={`/${selectedFile}?t=${Date.now()}`} 
+                        src={`/${selectedFile}?t=${Date.now()}&token=${token}`} 
                         className="preview-image"
                         alt={selectedTitle}
                         onError={() => setImageError(true)}
